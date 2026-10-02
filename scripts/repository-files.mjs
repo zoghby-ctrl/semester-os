@@ -5,6 +5,12 @@ export const rootFiles = new Set([
   "README.md", "CONTRIBUTING.md", "SECURITY.md", "VALIDATION.md",
 ]);
 export const reviewedScreenshots = {
+  "01-today-prism.png": "82486ac09137a37cc2067018b0bf841d63c1f1ee230b3e3a92d1f6e82adb6f88",
+  "02-weekly-schedule-campus.png": "80cb02242dc8a499ff7f147d75ade49567781ac11126aac642d7ace633afdf68",
+  "03-setup-university-importer.png": "fa38340556f506ab4d64bbfc6607bda5e1449524ef691eed060e50ddd1c80423",
+  "04-attendance-arrival-lateness.png": "ebd1ea3ea363ccc97fc9c63539f7eecc8cb7dbf9a61bbc6c3ebe75a8b7296937",
+  "05-course-workspace-tasks.png": "312f81339ac2a92455e7b345bee3b9407fce339ac172981ad9cf9e4425d6c25e",
+  "06-appearance-prism-themes.png": "13b7aafdaf0b31cfc7a0b65b75a459bed3c1b437125815b3bdfe2e009ea7814b",
   "appearance-desktop.png": "7c89c954c8bd24fa0004213deff44afc6848b8b366c5cffa36e568bda475153f",
   "appearance-light-mobile.png": "b7ea6e3ec9a31c8ab769c2dcb91a429da34b175d3d068c5b298ae1dd8f8c05eb",
   "privacy-desktop.png": "86e74e241a4f99a9209a82a6dff5b492134dd13eadfea5e653c8b191c4a7c9d3",

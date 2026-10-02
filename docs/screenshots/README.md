@@ -1,6 +1,21 @@
 # Public screenshots — October 2, 2026
 
-These seven screenshots are captured from the final local production/PWA build in isolated browser profiles. They show an empty workspace, authorized labelled demo metadata with a **blank display name**, or a public policy page. Browser chrome and addresses are not included.
+## Live launch screenshots
+
+Six app-content captures from the live beta in an isolated browser session, all at **1440 × 900** with default browser zoom. They use the app's labelled Demo Semester, the synthetic display label **Demo Student**, and one synthetic assignment. No real names, student IDs, emails, local paths, browser tabs, bookmarks, private documents, or account data appear. All six were visually reviewed; their exact SHA-256 hashes are registered in the repository screenshot allowlist.
+
+| File | Content |
+| --- | --- |
+| [01-today-prism.png](01-today-prism.png) | Today hero and next class in Prism |
+| [02-weekly-schedule-campus.png](02-weekly-schedule-campus.png) | Weekly timetable in Campus |
+| [03-setup-university-importer.png](03-setup-university-importer.png) | ECU and Another university setup choices |
+| [04-attendance-arrival-lateness.png](04-attendance-arrival-lateness.png) | Sample arrival at 08:42, status and 12-minute lateness preview; not saved |
+| [05-course-workspace-tasks.png](05-course-workspace-tasks.png) | Course workspace with a synthetic assignment |
+| [06-appearance-prism-themes.png](06-appearance-prism-themes.png) | Prism and the theme gallery |
+
+## Earlier production captures
+
+The seven earlier screenshots are captured from the final local production/PWA build in isolated browser profiles. They show an empty workspace, authorized labelled demo metadata with a **blank display name**, or a public policy page. Browser chrome and addresses are not included.
 
 | File | Content | Viewport |
 | --- | --- | --- |
@@ -12,7 +27,7 @@ These seven screenshots are captured from the final local production/PWA build i
 | appearance-light-mobile.png | Campus actual live preview | 390 × 844 |
 | privacy-desktop.png | Public Privacy Policy without a configured personal contact | 1440 × 960 |
 
-Each image receives full-resolution visual review, a visible-DOM privacy check and local OCR inspection. No personal name (including Demo Student), student ID, email, account details, local Windows path, private source document or backup appears. Only these exact reviewed SHA-256 hashes are eligible for Git.
+The earlier seven images received full-resolution visual review, a visible-DOM privacy check and local OCR inspection. No personal name (including Demo Student), student ID, email, account details, local Windows path, private source document or backup appears. Only these exact reviewed SHA-256 hashes are eligible for Git.
 
 The welcome capture is refreshed for the first-run navigation continuation. The other six reviewed anonymous demo/policy captures are unchanged. None includes browser chrome, addresses or embedded PNG text/EXIF metadata.
 
