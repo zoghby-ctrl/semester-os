@@ -3,9 +3,14 @@ import { getUniversityAdapter } from "../universities";
 import type { AcademicContext, ImporterResult } from "./types";
 import { validateImporterResult } from "./validation";
 import { resolveECUCode } from "../universities/ecu-codes";
+import { contextLabels, contextValue, suggestionConflicts } from "./academic-context";
+import { confirmedField } from "./confidence";
+import { planSelectionConflicts } from "./page-selection";
 
-export function reviewIssues(result:ImporterResult) {
+export function reviewIssues(result:ImporterResult,context?:AcademicContext) {
   const issues:string[]=[];
+  if (result.planReview && !result.planReview.acknowledged && planSelectionConflicts(result.planReview).length) issues.push("Review the material-plan page conflict: keep your selected page, use the suggestion, or choose another page.");
+  if (context) for(const suggestion of result.detectedContext??[]) if(suggestionConflicts(suggestion,context) && !result.contextDecisions?.includes(suggestion.id)) issues.push(`Review the detected ${contextLabels[suggestion.key].toLowerCase()} conflict with your provided context.`);
   if(!result.courses.length) issues.push("Add at least one course, or open an empty workspace from Welcome.");
   if(result.courses.length>100||result.sessions.length>500) issues.push("This semester exceeds the supported course or session limit.");
   const codes=result.courses.map(c=>c.code.value?.trim().toUpperCase());
@@ -29,18 +34,21 @@ export function reviewIssues(result:ImporterResult) {
 }
 export function normalizeImport(result:ImporterResult,context:AcademicContext):NormalizedSemester {
   result = validateImporterResult(result);
-  const issues=reviewIssues(result);if(issues.length) throw new Error(issues[0]);
+  const issues=reviewIssues(result,context);if(issues.length) throw new Error(issues[0]);
   const adapter=getUniversityAdapter(context.adapterId);
   if(result.adapterId!==adapter.id) throw new Error("The university selection changed. Read the timetable again with the selected university.");
   const semesterId=crypto.randomUUID();
   const rooms=[...new Set(result.sessions.map(s=>s.room.value?.trim()).filter((r):r is string=>!!r))].map((label,i)=>({id:`room-${i+1}`,label,building:null}));
   return normalizedSemesterSchema.parse({schemaVersion:1,origin:result.sources.length?"import":"manual",
-    student:{id:"student",displayName:context.name.trim()},university:adapter.profile,
+    student:{id:"student",displayName:context.name.trim()},university:{...adapter.profile,name:adapter.id==="generic" ? context.universityName?.trim() || adapter.profile.name : adapter.profile.name},
     program:context.program.trim()?{id:"program",name:context.program.trim(),specialization:context.specialization.trim()||null}:null,
     level:context.level.trim()?{id:"level",label:context.level.trim()}:null,
+    academicContext:{faculty:context.faculty?.trim()||null,specialization:context.specialization.trim()||null,
+      confirmed:Object.fromEntries((Object.keys(contextLabels) as (keyof typeof contextLabels)[]).filter(key=>contextValue(context,key)).map(key=>[key,context.provenance?.[key]??confirmedField(contextValue(context,key)).confidence])),
+      detected:result.detectedContext??[]},
     semester:{id:semesterId,name:context.semesterName.trim()||"My semester",start:context.start,end:context.end},
     courses:result.courses.map((c,i)=>({id:c.id,code:c.code.value!.trim(),name:c.name.value?.trim()||null,shortName:null,credits:c.credits.value,prerequisite:c.prerequisite.value,prerequisiteKnown:c.prerequisite.confidence.level!=="unknown",hours:c.hours.value,color:courseColors[i%courseColors.length],
-      ...([c.name,c.credits,c.prerequisite,c.hours].some(f=>f.confidence.method==="catalog") ? {metadataProvenance:{code:c.code.confidence,name:c.name.confidence,credits:c.credits.confidence,prerequisite:c.prerequisite.confidence,hours:c.hours.confidence}} : {}),
+      metadataProvenance:{code:c.code.confidence,name:c.name.confidence,credits:c.credits.confidence,prerequisite:c.prerequisite.confidence,hours:c.hours.confidence},
     })),
     offerings:result.courses.map(c=>({id:`offering-${c.id}`,courseId:c.id,semesterId,section:null})),
     sessions:result.sessions.map(s=>({id:s.id,courseId:s.courseId,offeringId:`offering-${s.courseId}`,day:s.day.value!,type:s.type.value!,start:s.start.value!,end:s.end.value!,room:s.room.value?.trim()||"",roomId:rooms.find(r=>r.label===s.room.value?.trim())?.id??null,timeConfirmed:true})),

@@ -15,7 +15,10 @@ export function WorkflowGuide({ compact = false }: { compact?: boolean }) {
     <summary>How to use Semester OS</summary>
     <div className="workflow-copy">
       <h3>Start with your timetable</h3>
-      <p>Setup → Upload your timetable → review each course and session → Generate my semester. A material plan is optional. Use the original PDF or choose only your semester's plan pages, and correct uncertain names before confirming. Edit scheduled times later in Settings → Timetable.</p>
+      <p>Semester OS turns your university timetable and academic plan into a personal academic operating system. It works with university timetables generally, with enhanced recognition for selected document formats.</p>
+      <p>Setup → Upload your timetable → choose where you study → review each course and session → Generate my semester. Another university uses the universal importer; ECU is the first enhanced adapter. University name, faculty, program, level, term, specialization, and dates are optional. Leave anything you don’t know blank.</p>
+      <p>A material plan is optional. Selectable PDF headings can suggest a page or academic context. Confirm, change, or leave context unknown; it is never confirmed automatically. Explicit page numbers count the cover as page 1 and are honored. If a page conflicts with your context, keep it deliberately, use a detected page, or choose another page. Catalog enrichment is separate from evidence about which plan page or semester you uploaded.</p>
+      <p>The verified ECU catalog contains six complete Computer Science records and four prerequisite names. It is not the full ECU curriculum and does not supply courses to other levels or programs. Unknown codes use document or manual values; generic universities receive no ECU metadata. Correct uncertain fields before confirming. Edit scheduled times later in Settings → Timetable.</p>
       <h3>Record or correct attendance</h3>
       <AttendanceInstructions />
       <h3>Keep course work together</h3>

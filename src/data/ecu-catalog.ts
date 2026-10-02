@@ -1,14 +1,15 @@
 // Canonical metadata already transcribed in legacy-academic.ts. This is a
 // bounded local curriculum reference, not a complete or live ECU catalog.
-export const ecuCatalogSource = "ECU local curriculum transcription · CS Level 2 / Semester 1";
+export const ecuCatalogSource = "ECU local curriculum transcription · verified Computer Science records only";
+export const ecuCatalogScope = { university:"Egyptian Chinese University", program:"Computer Science", level:2, semester:1, completeRecords:6, nameOnlyReferences:4 } as const;
 export interface ECUCatalogEntry {
   code: string; name: string; shortName: string; credits: number | null;
   prerequisite: {code:string;name:string} | null;
   prerequisiteKnown: boolean;
   hours: {lecture:number;lab:number;tutorial:number} | null;
-  level?: number; semester?: number;
+  level?: number; semester?: number; program?: string;
 }
-const scope = {level:2,semester:1,prerequisiteKnown:true};
+const scope = {level:ecuCatalogScope.level,semester:ecuCatalogScope.semester,program:ecuCatalogScope.program,prerequisiteKnown:true};
 export const ecuCurriculumCourses: readonly ECUCatalogEntry[] = [
   {...scope,code:"INF2101",name:"System Analysis and Design",shortName:"System Analysis",credits:3,prerequisite:null,hours:{lecture:2,lab:2,tutorial:0}},
   {...scope,code:"CSC2100",name:"Data Structures",shortName:"Data Structures",credits:3,prerequisite:{code:"CSC1100",name:"Computer Programming I"},hours:{lecture:2,lab:2,tutorial:0}},
@@ -33,5 +34,6 @@ export function indexECUCatalog(entries: readonly ECUCatalogEntry[]): ECUCatalog
 const references = ecuCurriculumCourses.flatMap(c => c.prerequisite ? [{
   code:c.prerequisite.code,name:c.prerequisite.name,shortName:c.prerequisite.name,
   credits:null,prerequisite:null,prerequisiteKnown:false,hours:null,
+  program:ecuCatalogScope.program,
 }] : []);
 export const ecuCourseCatalog = indexECUCatalog([...ecuCurriculumCourses,...references]);

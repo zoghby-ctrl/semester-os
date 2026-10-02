@@ -5,9 +5,9 @@ import { activateSemester, updateSettings } from "../lib/db";
 import { legacySemester } from "../lib/legacy";
 import { dateSchema, semesterConflicts } from "../lib/domain";
 import { days } from "../data/academic";
-import { universityAdapters, getUniversityAdapter } from "../universities";
+import { getUniversityAdapter } from "../universities";
 import { confirmedField, field } from "../importer/confidence";
-import { emptyImport, enrichMaterialPlan, manualCourse, manualSession, parseTimetable } from "../importer/parse";
+import { emptyImport, enrichMaterialPlan, manualCourse, manualSession, parseTimetable, recontextualizeImport } from "../importer/parse";
 import { enrichECUCourse } from "../importer/ecu-enrichment";
 import type { ECUAcademicContext } from "../universities/ecu-codes";
 import { normalizeImport, reviewIssues } from "../importer/normalize";
@@ -16,24 +16,46 @@ import { Modal } from "../components/ui";
 import { PrismArt } from "./Today";
 import { LegalLinks } from "./Legal";
 import { safeImportMessage } from "../lib/security";
-import { parsePageSelection } from "../importer/page-selection";
+import { parsePageSelection, reassessPlanReview, type MaterialPlanReview } from "../importer/page-selection";
+import { confirmContext, editContext, emptyAcademicContext } from "../importer/academic-context";
+import type { ContextSuggestion } from "../lib/domain";
+import { AcademicContextFields, ContextSuggestions, MaterialPlanPages } from "../components/AcademicContextFields";
 
 export function Welcome() {
   const { act, navigate, settings } = useApp();
   const [step,setStep]=useState<"welcome"|"upload"|"review"|"ready">("welcome");
-  const [context,setContext]=useState<AcademicContext>({name:settings.semester?.origin==="demo"?"":settings.name,adapterId:"ecu",program:"",level:"",semesterName:"",specialization:"",start:null,end:null});
+  const [context,setContext]=useState<AcademicContext>(()=>emptyAcademicContext(settings.semester?.origin==="demo"?"":settings.name));
   const [timetable,setTimetable]=useState<File|null>(null),[plan,setPlan]=useState<File|null>(null);
   const [timetableRange,setTimetableRange]=useState(""),[planRange,setPlanRange]=useState("");
   const [result,setResult]=useState<ImporterResult|null>(null),[pages,setPages]=useState<ExtractionPage[]>([]);
   const [busy,setBusy]=useState(false),[message,setMessage]=useState(""),[error,setError]=useState(""),[replace,setReplace]=useState(false);
   const controller=useRef<AbortController|null>(null);
   const [openRequested,setOpenRequested]=useState(false);
+  const [contextExpanded,setContextExpanded]=useState(false);
+  const timetableDraft=useRef<ImporterResult|null>(null);
+  const timetableSources=useRef<ExtractionPage[]>([]);
   useEffect(()=>()=>controller.current?.abort(),[]);
   // Wait for the reactive repository read before leaving first-run setup.
   // A committed write can resolve before useLiveQuery publishes its new settings.
   useEffect(()=>{if(openRequested&&settings.onboardingComplete) navigate("today");},[openRequested,settings.onboardingComplete,navigate]);
-  const changeContext=(key:keyof AcademicContext,value:string)=>setContext(c=>({...c,[key]:value||(["start","end"].includes(key)?null:"")}));
+  const applyContext=(next:AcademicContext,reEnrich=true)=>{
+    setContext(next);
+    if(result) setResult(r=>{
+      if(!r) return r;
+      const candidate=reEnrich?recontextualizeImport(r,getUniversityAdapter(next.adapterId),next,pages.filter(p=>p.source===plan?.name)):{...r,contextDecisions:[]};
+      if(candidate.planReview) candidate.planReview=reassessPlanReview(candidate.planReview,next);
+      return candidate;
+    });
+  };
+  const changeContext=(key:keyof AcademicContext,value:string)=>{
+    let next=editContext(context,key,value);
+    if(key==="adapterId") next=editContext(next,"universityName",value==="ecu"?"Egyptian Chinese University":"");
+    applyContext(next,["adapterId","faculty","program","level","semesterName"].includes(key));
+  };
+  const confirmDetected=(suggestions:ContextSuggestion[])=>applyContext(confirmContext(context,suggestions));
+  const keepContext=(suggestions:ContextSuggestion[])=>setResult(r=>r&&({...r,contextDecisions:[...new Set([...(r.contextDecisions??[]),...suggestions.map(s=>s.id)])]}));
   const extract=async()=>{
+    if(!context.adapterId) {setError("Choose where you study to select document recognition.");return;}
     if(!timetable) {setError("Choose your timetable first, or use manual entry.");return;}
     if((context.start&&!dateSchema.safeParse(context.start).success)||(context.end&&!dateSchema.safeParse(context.end).success)||(context.start&&context.end&&context.end<context.start)) {setError("Check the semester dates. The end must follow the start.");return;}
     let timetableSelection: number[] | undefined, planSelection: number[] | undefined;
@@ -48,10 +70,13 @@ export function Welcome() {
       const adapter=getUniversityAdapter(context.adapterId);
       let candidate=parseTimetable(timetablePages,adapter,context),allPages=timetablePages;
       if(adapter.id==="ecu") candidate=enrichMaterialPlan(candidate,[],adapter,context);
+      timetableDraft.current=structuredClone(candidate);timetableSources.current=timetablePages;
       if(plan) {
         try {
-          const planPages=await browserExtractor.extract(plan,{signal:operation.signal,progress:setMessage,pages:planSelection,materialPlan:{adapterId:adapter.id,courseCodes:candidate.courses.flatMap(c=>c.code.value?[c.code.value]:[])}});
+          let planReview:MaterialPlanReview|undefined;
+          const planPages=await browserExtractor.extract(plan,{signal:operation.signal,progress:setMessage,pages:planSelection,materialPlan:{adapterId:adapter.id,context,onReview:review=>{planReview=review;},courseCodes:candidate.courses.flatMap(c=>c.code.value?[c.code.value]:[])}});
           candidate=enrichMaterialPlan(candidate,planPages,adapter,context);allPages=[...allPages,...planPages];
+          candidate.planReview=planReview;
         } catch(e) {
           if(operation.signal.aborted) throw e;
           candidate.warnings.push(`Material plan: ${safeImportMessage(e, "This plan could not be read.")} Your timetable is ready to review; you can go back to choose plan pages or enter course details below.`);
@@ -62,11 +87,34 @@ export function Welcome() {
     } catch(e) {if(!operation.signal.aborted) setError(e instanceof Error?e.message:"We couldn't read this timetable. Try the PDF or enter sessions manually.");}
     finally {if(controller.current===operation){setBusy(false);controller.current=null;}}
   };
+  const usePlanPages=async(selection:number[])=>{
+    if(!plan||!result) return;
+    const operation=new AbortController();controller.current=operation;setBusy(true);setError("");setMessage("Reading your chosen plan page…");
+    try {
+      const {browserExtractor}=await import("../importer/extract");
+      const adapter=getUniversityAdapter(context.adapterId);
+      let planReview:MaterialPlanReview|undefined;
+      const planPages=await browserExtractor.extract(plan,{signal:operation.signal,progress:setMessage,pages:selection,materialPlan:{adapterId:adapter.id,context,onReview:review=>{planReview=review;},courseCodes:result.courses.flatMap(c=>c.code.value?[c.code.value]:[])}});
+      if(operation.signal.aborted) return;
+      const draft=structuredClone(result);
+      draft.detectedContext=draft.detectedContext?.filter(s=>s.document==="timetable");draft.contextDecisions=[];
+      draft.sources=draft.sources.filter(s=>s.name!==plan.name);draft.warnings=draft.warnings.filter(w=>!w.includes("material-plan") && !w.includes("Catalog defaults retained"));
+      for(const course of draft.courses) for(const key of ["name","credits","prerequisite","hours"] as const) {
+        if(course[key].confidence.method==="manual"&&course[key].confidence.level==="confirmed") continue;
+        const original=timetableDraft.current?.courses.find(c=>c.id===course.id);
+        Object.assign(course,{[key]:original?.[key]??field(null)});course.reviewed=false;
+      }
+      const candidate=enrichMaterialPlan(draft,planPages,adapter,context);candidate.planReview=planReview;
+      setResult(candidate);setPages([...timetableSources.current,...planPages]);setPlanRange(selection.join(", "));
+    } catch(e) {if(!operation.signal.aborted) setError(safeImportMessage(e,"The chosen page could not be read. Your draft has been kept."));}
+    finally {if(controller.current===operation){setBusy(false);controller.current=null;}}
+  };
   const generate=async()=>{
     if(!result) return;setBusy(true);setError("");
     try {
       const semester=normalizeImport(result,context);
       await activateSemester(semester,settings.semester?.semester.id??null);
+      timetableDraft.current=null;timetableSources.current=[];
       setReplace(false);setPages([]);setTimetable(null);setPlan(null);setStep("ready");window.scrollTo(0,0);
     } catch(e) {setError(safeImportMessage(e,"Check the imported fields: a value is missing, out of range, or unsupported. Your existing semester has been kept."));setReplace(false);}
     finally {setBusy(false);}
@@ -84,7 +132,7 @@ export function Welcome() {
     <p className="setup-legal">By continuing, you acknowledge the Terms of Use and Privacy Policy. <LegalLinks /></p>
   </div>;
   if(step==="ready") return <div className="welcome-space generated-space"><div className="generated-check"><Check size={30}/></div><div className="eyebrow">YOUR SEMESTER IS READY</div><h1>Make it<br/><span className="welcome-accent">your own.</span></h1><p>{result?.courses.length} courses and {result?.sessions.length} weekly sessions, reviewed by you. Your work is saved in this browser.</p><div className="guide-grid"><div><strong>01 / Today</strong><p>Your current class, next room, and the day ahead.</p></div><div><strong>02 / Check in</strong><p>Record your arrival or correct attendance from any class.</p></div><div><strong>03 / Your courses</strong><p>Add notes, assignments, and topics as the semester unfolds.</p></div></div><button className="button" onClick={()=>navigate("today")}>Enter your semester <ArrowRight size={17}/></button><p className="privacy-line">Keep a backup in Settings → Data & backup.</p></div>;
-  const issues=result?reviewIssues(result):[];
+  const issues=result?reviewIssues(result,context):[];
   const conflicts=result?semesterConflicts(result.sessions.filter(s=>s.day.value!==null&&s.start.value&&s.end.value).map(s=>({id:s.id,day:s.day.value!,start:s.start.value!,end:s.end.value!}))):[];
   return <div className="setup-space">
     <div className="setup-top"><button className="text-link" disabled={busy} onClick={()=>{setError("");setStep(step==="review"?"upload":"welcome");}}><ArrowLeft size={15}/> Back</button><div className="setup-steps"><span className={step==="upload"?"active":""}>01 Upload</span><i/><span className={step==="review"?"active":""}>02 Review</span><i/><span>03 Your semester</span></div></div>
@@ -92,28 +140,31 @@ export function Welcome() {
     {error&&<div className="import-warning" role="alert">{error}</div>}
     {step==="upload"?<form onSubmit={e=>{e.preventDefault();void extract();}}>
       <fieldset disabled={busy} className="setup-fields">
-        <section className="panel setup-context"><label>University<select value={context.adapterId} onChange={e=>changeContext("adapterId",e.target.value)}>{universityAdapters.map(a=><option key={a.id} value={a.id}>{a.profile.name}</option>)}</select></label><label>Your name <span className="optional">Optional</span><input maxLength={50} autoComplete="given-name" placeholder="What should we call you?" value={context.name} onChange={e=>changeContext("name",e.target.value)}/></label>
-          <details className="academic-details"><summary>Academic context <span className="optional">Optional · add now or later</span></summary><div className="form-grid"><label>Program<input maxLength={200} placeholder="Your program" value={context.program} onChange={e=>changeContext("program",e.target.value)}/></label><label>Academic level<input maxLength={100} placeholder="Your level or year" value={context.level} onChange={e=>changeContext("level",e.target.value)}/></label><label>Semester<input maxLength={100} placeholder="Your semester name" value={context.semesterName} onChange={e=>changeContext("semesterName",e.target.value)}/></label><label>Specialization<input maxLength={200} placeholder="If relevant" value={context.specialization} onChange={e=>changeContext("specialization",e.target.value)}/></label><label>Semester starts<input type="date" value={context.start??""} onChange={e=>changeContext("start",e.target.value)}/></label><label>Semester ends<input type="date" value={context.end??""} onChange={e=>changeContext("end",e.target.value)}/></label></div></details>
-        </section>
+        <AcademicContextFields context={context} onChange={changeContext}/>
         <div className="upload-grid"><DocumentDrop title="Your timetable" description="PDF, screenshot, or image. Start here." file={timetable} onFile={f=>{setTimetable(f);setTimetableRange("");}}/><DocumentDrop title="Material plan" description="Optional. Adds course names, credits, and prerequisites." file={plan} onFile={f=>{setPlan(f);setPlanRange("");}}/></div>
         <div className="form-grid">
           {timetable&&/\.pdf$/i.test(timetable.name)&&<label>Timetable PDF pages<input value={timetableRange} maxLength={100} placeholder="All pages, or e.g. 1-2" onChange={e=>setTimetableRange(e.target.value)} aria-describedby="pdf-pages-help"/></label>}
-          {plan&&/\.pdf$/i.test(plan.name)&&<label>Material plan PDF pages<input value={planRange} maxLength={100} placeholder="Your level's pages, e.g. 4-5" onChange={e=>setPlanRange(e.target.value)} aria-describedby="pdf-pages-help"/></label>}
+          {plan&&/\.pdf$/i.test(plan.name)&&<label>Material plan PDF pages<input value={planRange} maxLength={100} placeholder="Optional · page numbers or ranges" onChange={e=>setPlanRange(e.target.value)} aria-describedby="pdf-pages-help"/></label>}
         </div>
-        <p className="fine-print" id="pdf-pages-help">Use PDF page numbers, counting the cover as page 1. Leave blank to read all pages in a PDF of up to 20 pages; for longer PDFs, select up to 20 pages from a document of up to 500 pages. Choosing only your level and semester avoids reading the whole plan.</p>
-        <p className="fine-print">{getUniversityAdapter(context.adapterId).importHelp} Up to 25 MB per file. The original selectable-text PDF gives the clearest course names. For screenshots, crop to your semester's table, keep the course-code and name columns and outer table edges, and use the original full-resolution image. English OCR is supported; Arabic text is not transcribed. Detected ECU table rules can identify columns without reading Arabic headers. Review names against the source.</p>
+        <p className="fine-print" id="pdf-pages-help">Use PDF page numbers, counting the cover as page 1. Your explicit selection is always honored. For PDFs of up to 20 pages, selectable headings can suggest a likely match; suggestions never confirm your level or term. Longer PDFs require a selection of up to 20 pages, with a maximum of 500 pages per document.</p>
+        <p className="fine-print">{context.adapterId?getUniversityAdapter(context.adapterId).importHelp:"Works with university timetables generally, with enhanced recognition for selected document formats."} Up to 25 MB per file. The original selectable-text PDF gives the clearest course names. For screenshots, crop to the relevant table and keep the course-code and name columns and outer table edges. Local English OCR is supported; Arabic image text is not transcribed. Review all fields against the source.</p>
       </fieldset>
-      {busy?<div className="extraction-progress" role="status"><LoaderCircle size={19}/><div><strong>{message}</strong><p>Reading on this device. This can take a minute for scanned pages.</p></div><button type="button" className="button secondary small" onClick={()=>{controller.current?.abort();setMessage("Cancelling…");}}>Cancel</button></div>:<div className="welcome-actions"><button className="button" type="submit" disabled={!timetable}><FileText size={17}/> Read my timetable</button><button type="button" className="button secondary" onClick={()=>{setResult(emptyImport(context.adapterId));setPages([]);setError("");setStep("review");}}>Enter courses & sessions manually</button></div>}
+      {busy?<div className="extraction-progress" role="status"><LoaderCircle size={19}/><div><strong>{message}</strong><p>Reading on this device. This can take a minute for scanned pages.</p></div><button type="button" className="button secondary small" onClick={()=>{controller.current?.abort();setMessage("Cancelling…");}}>Cancel</button></div>:<div className="welcome-actions"><button className="button" type="submit" disabled={!timetable||!context.adapterId}><FileText size={17}/> Read my timetable</button><button type="button" className="button secondary" disabled={!context.adapterId} onClick={()=>{setResult(emptyImport(context.adapterId));setPages([]);setError("");setStep("review");}}>Enter courses & sessions manually</button></div>}
       <p className="privacy-line"><ShieldCheck size={15}/> Files stay in memory during review and are released after setup.</p>
     </form>:result&&<>
+      <fieldset disabled={busy} className="setup-fields"><AcademicContextFields context={context} onChange={changeContext} review expanded={contextExpanded}/>
+      <ContextSuggestions suggestions={result.detectedContext??[]} context={context} decisions={result.contextDecisions??[]} onConfirm={confirmDetected} onKeep={keepContext} onChange={()=>setContextExpanded(true)}/>
+      {result.planReview&&<MaterialPlanPages review={result.planReview} context={context} onKeep={()=>setResult(r=>r&&({...r,planReview:r.planReview?{...r.planReview,acknowledged:true}:undefined,contextDecisions:[...new Set([...(r.contextDecisions??[]),...(r.detectedContext??[]).filter(s=>s.document==="material-plan"&&r.planReview?.usedPages.includes(s.confidence.page??0)).map(s=>s.id)])]}))} onUse={selection=>void usePlanPages(selection)} onChoose={()=>setStep("upload")}/>}</fieldset>
+      {busy&&<div className="extraction-progress" role="status"><LoaderCircle size={19}/><strong>{message}</strong><button className="button small secondary" onClick={()=>controller.current?.abort()}>Cancel</button></div>}
+      <p className="fine-print review-provenance-key">User provided · Detected from source{context.adapterId==="ecu"?" · ECU catalog when eligible":""} · Unknown stays editable</p>
       <div className="review-summary"><div><strong>{result.courses.length}</strong><span>courses found</span></div><div><strong>{result.sessions.length}</strong><span>weekly sessions</span></div><div><strong>{result.courses.filter(c=>!c.reviewed).length+result.sessions.filter(s=>!s.reviewed).length}</strong><span>still to review</span></div></div>
       {result.warnings.length>0&&<div className="import-warning"><strong>Before you confirm</strong>{result.warnings.map((w,i)=><p key={i}>{w}</p>)}</div>}
       {conflicts.length>0&&<div className="import-warning" role="status">{conflicts.length} overlapping session pair{conflicts.length!==1?"s":""}. Check the times or keep the conflict if it is present in the university timetable. Both sessions will remain visible.</div>}
-      <div className="review-layout"><div className="review-content"><div className="section-head"><h2>Your courses</h2><button className="button small secondary" onClick={()=>setResult(r=>r&&({...r,courses:[...r.courses,manualCourse("")]}))}><Plus size={14}/> Add course</button></div>
+      <fieldset disabled={busy} className="setup-fields"><div className="review-layout"><div className="review-content"><div className="section-head"><h2>Your courses</h2><button className="button small secondary" onClick={()=>setResult(r=>r&&({...r,courses:[...r.courses,manualCourse("")]}))}><Plus size={14}/> Add course</button></div>
         {result.courses.map(c=><CourseReview key={c.id} course={c} adapterId={context.adapterId} context={context} onChange={patch=>setResult(r=>r&&({...r,courses:r.courses.map(x=>x.id===c.id?{...x,...patch}:x)}))} onRemove={()=>setResult(r=>r&&({...r,courses:r.courses.filter(x=>x.id!==c.id),sessions:r.sessions.filter(s=>s.courseId!==c.id)}))}/>)}
         <div className="section-head"><h2>Your weekly sessions</h2><button className="button small secondary" disabled={!result.courses.length} onClick={()=>setResult(r=>r&&({...r,sessions:[...r.sessions,manualSession(r.courses[0].id)]}))}><Plus size={14}/> Add session</button></div>
         {result.sessions.map((s,i)=><SessionReview key={s.id} session={s} index={i} courses={result.courses} onChange={patch=>setResult(r=>r&&({...r,sessions:r.sessions.map(x=>x.id===s.id?{...x,...patch}:x)}))} onRemove={()=>setResult(r=>r&&({...r,sessions:r.sessions.filter(x=>x.id!==s.id)}))}/>)}
-      </div><SourcePreview pages={pages}/></div>
+      </div><SourcePreview pages={pages}/></div></fieldset>
       <div className="generate-bar"><div><strong>{issues.length?"A few details need your attention":"Everything is ready to create"}</strong><p>{issues[0]??"Only the details you reviewed will become your semester."}</p></div><button className="button" disabled={busy||issues.length>0} onClick={()=>settings.semester?setReplace(true):void generate()}>Generate my semester <ArrowRight size={16}/></button></div>
     </>}
     <Modal open={replace} onClose={()=>!busy&&setReplace(false)} title="Start this semester?" description="Your reviewed timetable will become the active semester."><p>Your current semester and its records will be saved as a local recovery point. The new semester starts with empty attendance, notes, and plans. Appearance preferences carry over.</p><p className="fine-print">Export a backup first if you want a separate copy. Recovery points stay in this browser.</p><div className="dialog-actions"><button className="button secondary" disabled={busy} onClick={()=>setReplace(false)}>Keep reviewing</button><button className="button" disabled={busy} onClick={()=>void generate()}>{busy?"Saving…":"Start reviewed semester"}</button></div></Modal>
@@ -131,15 +182,18 @@ function FieldLabel({label,field,children}:{label:string;field:ExtractedField<un
 export function CourseReview({course:c,adapterId,context,onChange,onRemove}:{course:CandidateCourse;adapterId:string;context:ECUAcademicContext;onChange:(patch:Partial<CandidateCourse>)=>void;onRemove:()=>void}) {
   const change=(patch:Partial<CandidateCourse>)=>onChange(adapterId==="ecu"&&patch.code?enrichECUCourse({...c,...patch,reviewed:false},context):{...patch,reviewed:false});
   const [hoursDraft,setHoursDraft]=useState({lecture:c.hours.value?.lecture.toString()??"",lab:c.hours.value?.lab.toString()??"",tutorial:c.hours.value?.tutorial.toString()??""});
-  const hoursCode=useRef(c.code.value);
+  const scopeKey=[c.code.value,adapterId,context.program,context.faculty,context.level,context.semesterName].join(":");
+  const hoursCode=useRef(scopeKey);
+  const hoursEdit=useRef(false);
   useEffect(()=>{
-    if(hoursCode.current===c.code.value) return;
-    hoursCode.current=c.code.value;
+    if(hoursEdit.current&&hoursCode.current===scopeKey) {hoursEdit.current=false;return;}
+    hoursEdit.current=false;
+    hoursCode.current=scopeKey;
     setHoursDraft({lecture:c.hours.value?.lecture.toString()??"",lab:c.hours.value?.lab.toString()??"",tutorial:c.hours.value?.tutorial.toString()??""});
-  },[c.code.value,c.hours.value]);
+  },[scopeKey,c.hours]);
   const incompleteHours=Object.values(hoursDraft).some(Boolean)&&!Object.values(hoursDraft).every(Boolean);
   const changeHours=(type:keyof typeof hoursDraft,value:string)=>{
-    const next={...hoursDraft,[type]:value};setHoursDraft(next);
+    const next={...hoursDraft,[type]:value};hoursEdit.current=true;setHoursDraft(next);
     change({hours:Object.values(next).every(Boolean)?confirmedField({lecture:Number(next.lecture),lab:Number(next.lab),tutorial:Number(next.tutorial)}):field<{lecture:number;lab:number;tutorial:number}>(null)});
   };
   return <section className={`panel review-card ${c.reviewed?"reviewed":""}`}><div className="review-card-head"><span className="eyebrow">COURSE / {c.code.value||"ADD CODE"}</span><button className="icon-button" aria-label={`Remove course ${c.code.value} and its sessions`} onClick={onRemove}><Trash2 size={15}/></button></div><div className="course-review-fields"><FieldLabel label="Course code" field={c.code}><input maxLength={40} value={c.code.value??""} onChange={e=>change({code:confirmedField(e.target.value.toUpperCase())})}/></FieldLabel><FieldLabel label="Official name" field={c.name}><input maxLength={200} placeholder="Optional · course code works on its own" value={c.name.value??""} onChange={e=>change({name:e.target.value?confirmedField(e.target.value):{value:null,confidence:confirmedField("Cleared").confidence}})}/></FieldLabel><FieldLabel label="Credit hours" field={c.credits}><input type="number" min={0} max={30} step="0.5" placeholder="Unknown" value={c.credits.value??""} onChange={e=>change({credits:e.target.value?confirmedField(Number(e.target.value)):{value:null,confidence:confirmedField("Cleared").confidence}})}/></FieldLabel></div>

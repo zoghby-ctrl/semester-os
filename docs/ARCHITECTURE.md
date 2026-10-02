@@ -16,6 +16,14 @@ The repository functions isolate persistence from the application domain. A futu
 
 The Welcome flow keeps source previews alongside editable fields. Every course and session requires confirmation. Layout-derived minutes remain visibly uncertain until review. Cancellation and a 180-second timeout terminate extraction work. Source blobs/previews are temporary and excluded from backups. The local OCR language is English; arbitrary university formats and recognition accuracy are not guaranteed.
 
+Fresh setup has no adapter selected. `AcademicContext` includes optional university name and faculty, arbitrary program/level/term/specialization/dates, and field provenance. `academic-context.ts` detects explicit headings before the first course row; detection never reads catalog scope, code digits, filenames, demo records, or user filters as context evidence. Suggestions remain separate from confirmed fields. Context conflicts must be resolved before activation.
+
+Material-plan review indexes bounded PDF text before rendering. Short PDFs can expose other candidate pages; long PDFs inspect only selected pages. Explicit page selections always determine the rendered/OCRed pages, even when codes do not match. Automatic selection is a visible suggestion; the selected page and detected academic context have independent review decisions. A small header strip on an already selected ruled scan preserves headings otherwise excluded by the table crop. No scan is fully OCRed just to find an alternative page.
+
+The ECU catalog has six complete verified Computer Science records and four name-only references. Lookup respects explicitly incompatible institutions, programs, levels, and terms; it never seeds enrollment or supplies ECU metadata to generic imports. Adapter/context corrections remove obsolete catalog fields while preserving manual edits and sessions. Generic parsing extracts available row names, sessions, labelled credits, and prerequisite text and persists provenance.
+
+The optional aggregate `academicContext` evidence is an additive change: normalized semester version 1, settings/backup version 2, IndexedDB name/version, IDs, and tables stay intact. Existing v2 data passes through migration without inferred context or new defaults. Version-1 workspace/backup conversion retains the historical owner records, and new evidence survives v2 backup/recovery validation. [The generalization report](PRODUCT_GENERALIZATION.md) includes the compatibility matrix.
+
 ## Appearance
 
 `themes/schema.ts` validates selections, custom palettes, atmosphere controls, and saved configurations. `themes/definitions.ts` defines 13 curated identities and a custom theme with palette, surfaces, typography, primitives, motion/particle profiles, effects, contrast rules, budgets, and understandable settings. Theme tokens protect reading contrast, including custom mid-tone backgrounds.

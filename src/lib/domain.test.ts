@@ -46,6 +46,32 @@ describe("Normalized academic data", () => {
   });
 });
 describe("Safe migration and portability", () => {
+  it("preserves an existing ECU workspace and every record during additive context migration",async()=>{
+    const d=database(),settings=demoSettings();settings.semester!.origin="legacy";settings.theme="campus";
+    await d.settings.put(settings);
+    const stamp="2026-10-01T12:00:00Z",courseId="BSC1301";
+    await d.attendance.put({id:"2026-09-27:sun-math",sessionId:"sun-math",date:"2026-09-27",status:"attended",arrival:"08:30",plannedStart:"08:30",plannedEnd:"10:30",lateMinutes:0,override:false,note:"Keep",updatedAt:stamp});
+    await d.topics.put({id:"topic",courseId,title:"Keep topic",done:true,updatedAt:stamp});
+    await d.items.put({id:"item",courseId,title:"Keep plan",kind:"assignment",due:null,done:false,note:"",updatedAt:stamp});
+    await d.notes.put({id:"note",courseId,sessionId:null,date:null,text:"Keep note",updatedAt:stamp});
+    await d.study.put({id:"study",courseId,date:"2026-10-01",seconds:1200,note:"Keep history",updatedAt:stamp});
+    const timer={id:"active" as const,courseId,startedAt:12345,accumulated:42,note:"Keep timer"};await d.timer.put(timer);
+    await d.recovery.add({kind:"Existing recovery",createdAt:stamp,settings});
+    const before=await exportBackup(d);
+    await initialize(d);await initialize(d);d.close();await d.open();
+    expect(await d.settings.get("main")).toEqual(settings);expect((await d.settings.get("main"))?.semester?.academicContext).toBeUndefined();
+    const after=await exportBackup(d);expect({...after,exportedAt:before.exportedAt}).toEqual(before);
+    expect(await d.timer.get("active")).toEqual(timer);expect(await d.recovery.count()).toBe(1);
+    await importBackup(before,d);expect(await d.settings.get("main")).toEqual(settings);expect(await d.notes.get("note")).toEqual(before.notes[0]);
+  });
+  it("round-trips new generic context evidence in v2 backups without changing old semesters",async()=>{
+    const d=database();await initialize(d);const settings=demoSettings();
+    settings.semester!.university={id:"generic",adapterId:"generic",name:"Custom University"};
+    settings.semester!.academicContext={faculty:"Custom School",specialization:"Custom specialty",confirmed:{},detected:[]};
+    await saveSettings(settings,d);const backup=await exportBackup(d);await importBackup(JSON.parse(JSON.stringify(backup)),d);
+    expect(backup.version).toBe(2);expect((await d.settings.get("main"))?.semester).toEqual(settings.semester);
+    const old=legacySemester("",false);expect(normalizedSemesterSchema.parse(old)).toEqual(old);expect(old.academicContext).toBeUndefined();
+  });
   it("upgrades a real version-1 IndexedDB database transactionally and idempotently", async () => {
     const name = `v1-${crypto.randomUUID()}`;
     const old = new Dexie(name);

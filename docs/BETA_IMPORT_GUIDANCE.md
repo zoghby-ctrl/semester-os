@@ -1,5 +1,7 @@
 # Beta import performance and workflow guidance
 
+Historical performance milestone. The later [product generalization pass](PRODUCT_GENERALIZATION.md) adds context-safe metadata and visible page review while retaining bounded extraction, text priority, and lightweight previews. Its validation supersedes the earlier counts below.
+
 Follow-up: [ECU code-first enrichment](ECU_CODE_FIRST_ENRICHMENT.md) supersedes the free-form name OCR strategy below. Known ECU codes now use catalog defaults and skip the extra name-column OCR pass. The earlier verification figures below describe the preceding pass; the current total is 194 passing tests.
 
 October 2, 2026. Continued the existing public repository from commit 6731fcd on main, matching origin/main and the deployed production source. This pass is local and uncommitted; nothing was pushed or deployed.

@@ -2,6 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { browserExtractor } from "./extract";
 import type { ExtractionWord } from "./types";
+import { emptyAcademicContext } from "./academic-context";
+import type { MaterialPlanReview } from "./page-selection";
 
 const mocks = vi.hoisted(() => ({
   getDocument: vi.fn(), createWorker: vi.fn(), prepareOcrImage: vi.fn(),
@@ -45,6 +47,58 @@ beforeEach(() => {
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
 
 describe("Local extractor performance and resource safety", () => {
+  it("prefers sparse but structured timetable PDF text over unnecessary OCR",async()=>{
+    mocks.getPage.mockImplementation(async()=>({getViewport:()=>({width:1000,height:700,transform:[]}),getTextContent:async()=>({items:[{str:"Monday BIO101 Life Science Lecture 08:00-09:30 A403",width:500,height:12,transform:[1,0,0,12,10,50]}]}),render:mocks.render,cleanup:mocks.cleanup}));
+    const pages=await browserExtractor.extract(file(),{signal:new AbortController().signal,progress:vi.fn(),pages:[1]});
+    expect(pages[0].method).toBe("pdf-text");expect(mocks.createWorker).not.toHaveBeenCalled();
+  });
+  it("retains visible OCR headings when the table is cropped and keeps them reviewable",async()=>{
+    mocks.getPage.mockImplementation(async()=>({getViewport:()=>({width:1300,height:700,transform:[]}),getTextContent:async()=>({items:[]}),render:mocks.render,cleanup:mocks.cleanup}));
+    mocks.prepareOcrImage.mockImplementation(canvas=>({canvas,table:{columns:Array.from({length:13},(_,i)=>i*100),rows:[80,180,280]}}));
+    mocks.recognize.mockResolvedValueOnce(ocrData([word("CSC2105",10,40)])).mockResolvedValueOnce(ocrData([word("Level 3 Semester 2",10,20)]));
+    const context={...emptyAcademicContext(),adapterId:"ecu"},onReview=vi.fn();
+    const [p]=await browserExtractor.extract(file(),{...options(),pages:[1],materialPlan:{...options().materialPlan,context,onReview}});
+    expect(p.words.map(w=>w.y)).toEqual([20,120]);expect(onReview.mock.calls.at(-1)![0].candidates[0].detected.map((s:{value:string})=>s.value)).toEqual(["Level 3","Semester 2"]);
+    expect(mocks.recognize).toHaveBeenCalledTimes(2);
+  });
+  it("retains an explicitly selected nonmatching page instead of discarding it",async()=>{
+    const pages=await browserExtractor.extract(file(),{...options(),pages:[1]});
+    expect(pages.map(p=>p.page)).toEqual([1]);expect(pages[0].text).toContain("CSC2200");
+    expect(mocks.render).toHaveBeenCalledTimes(1);expect(mocks.createWorker).not.toHaveBeenCalled();
+  });
+  it("indexes actual headings, keeps a wrong selected page, and suggests an alternative",async()=>{
+    mocks.getPage.mockImplementation(async(number:number)=>({getViewport:({scale}:{scale:number})=>({width:1000*scale,height:700*scale,transform:[]}),
+      getTextContent:async()=>({items:[{str:number===3?"Level 1 Semester 1":"Level 2 Semester 1",width:200,height:12,transform:[1,0,0,12,10,30]},...content("CSC2105").map(item=>({...item,transform:[1,0,0,12,item.transform[4],100]}))]}),render:mocks.render,cleanup:mocks.cleanup}));
+    const reviews:MaterialPlanReview[]=[];
+    const context={...emptyAcademicContext(),adapterId:"ecu",level:"Level 1",semesterName:"Semester 1"};
+    const pages=await browserExtractor.extract(file(),{...options(),pages:[1],materialPlan:{...options().materialPlan,context,onReview:r=>reviews.push(r)}});
+    expect(pages.map(p=>p.page)).toEqual([1]);const review=reviews.at(-1)!;
+    expect(review.usedPages).toEqual([1]);expect(review.suggestedPages).toEqual([3]);expect(review.candidates[0].conflicts).toHaveLength(1);
+    expect(mocks.render).toHaveBeenCalledTimes(1);expect(mocks.createWorker).not.toHaveBeenCalled();
+  });
+  it("renders only the likely text-page match wherever its heading appears",async()=>{
+    mocks.getDocument.mockReturnValue({promise:Promise.resolve({numPages:8,getPage:mocks.getPage}),destroy:mocks.destroy});
+    mocks.getPage.mockImplementation(async(number:number)=>({getViewport:({scale}:{scale:number})=>({width:1000*scale,height:700*scale,transform:[]}),
+      getTextContent:async()=>({items:[{str:number===7?"Level 2 Semester 1":"Level 1 Semester 1",width:200,height:12,transform:[1,0,0,12,10,30]},...content("CSC2105").map(item=>({...item,transform:[1,0,0,12,item.transform[4],100]}))]}),render:mocks.render,cleanup:mocks.cleanup}));
+    const onReview=vi.fn(),context={...emptyAcademicContext(),adapterId:"ecu",level:"Level 2",semesterName:"Semester 1"};
+    const pages=await browserExtractor.extract(file(),{...options(),materialPlan:{...options().materialPlan,context,onReview}});
+    expect(pages.map(p=>p.page)).toEqual([7]);expect(onReview.mock.calls.at(-1)![0].suggestedPages).toEqual([7]);
+    expect(mocks.render).toHaveBeenCalledTimes(1);expect(mocks.render.mock.calls[0][0].viewport.width).toBe(1200);expect(mocks.createWorker).not.toHaveBeenCalled();
+  });
+  it("bounds long-plan heading inspection to selected pages",async()=>{
+    mocks.getDocument.mockReturnValue({promise:Promise.resolve({numPages:200,getPage:mocks.getPage}),destroy:mocks.destroy});
+    const context={...emptyAcademicContext(),adapterId:"generic"},onReview=vi.fn();
+    const pages=await browserExtractor.extract(file(),{...options(),pages:[101],materialPlan:{adapterId:"generic",courseCodes:["CSC2105"],context,onReview}});
+    expect(new Set(mocks.getPage.mock.calls.map(c=>c[0]))).toEqual(new Set([101]));expect(pages[0].page).toBe(101);
+    expect(onReview.mock.calls.at(-1)![0].candidates).toHaveLength(1);
+  });
+  it("does not use ECU column refinement in generic mode",async()=>{
+    mocks.getPage.mockImplementation(async()=>({getViewport:()=>({width:1300,height:700,transform:[]}),getTextContent:async()=>({items:[]}),render:mocks.render,cleanup:mocks.cleanup}));
+    mocks.prepareOcrImage.mockImplementation(canvas=>({canvas,table:{columns:Array.from({length:13},(_,i)=>i*100),rows:[0,100,200]}}));
+    mocks.recognize.mockResolvedValue(ocrData([word("CSC2105",10,110),word("Custom title",110,110)]));
+    await browserExtractor.extract(file(),{...options(),pages:[1],materialPlan:{adapterId:"generic",courseCodes:["CSC2105"]}});
+    expect(mocks.recognize).toHaveBeenCalledTimes(1);
+  });
   it("skips extra free-form name OCR when enrolled ECU codes have catalog defaults", async () => {
     mocks.getPage.mockImplementation(async()=>({getViewport:()=>({width:1300,height:700,transform:[]}),getTextContent:async()=>({items:[]}),render:mocks.render,cleanup:mocks.cleanup}));
     mocks.prepareOcrImage.mockImplementation(canvas=>({canvas,table:{columns:Array.from({length:13},(_,i)=>i*100),rows:[0,100,200]}}));

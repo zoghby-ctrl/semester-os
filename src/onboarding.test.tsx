@@ -7,6 +7,8 @@ import App from "./App";
 import { Provider, setupNavigationHint } from "./lib/context";
 import { activateSemester, db, initialize, updateSettings } from "./lib/db";
 import { legacySemester } from "./lib/legacy";
+import { reviewMaterialPlanPages } from "./importer/page-selection";
+import type { ExtractionPage } from "./importer/types";
 
 // The real App, Provider, setup UI, parsing, normalization and persistence run.
 // Only GPU/PWA browser services and document extraction need test substitutes.
@@ -72,6 +74,21 @@ function button(label: string, scope: ParentNode = document) {
 async function click(label: string, scope: ParentNode = document) {
   await act(async () => button(label, scope).click());
 }
+function inputFor(label:string) {return [...document.querySelectorAll<HTMLLabelElement>("label")].find(l=>l.textContent?.startsWith(label))!.querySelector<HTMLInputElement>("input")!;}
+async function fill(label:string,value:string) {await act(async()=>{const input=inputFor(label);Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(input,value);input.dispatchEvent(new Event("input",{bubbles:true}));});}
+async function uploadTimetable(plan=false) {
+  for(const [index,name] of (plan?["synthetic-timetable.pdf","synthetic-plan.pdf"]:["synthetic-timetable.pdf"]).entries()) {
+    const input=document.querySelectorAll<HTMLInputElement>('input[type="file"]')[index];
+    Object.defineProperty(input,"files",{value:[new File(["%PDF-1.4 synthetic fixture"],name,{type:"application/pdf"})],configurable:true});
+    await act(async()=>input.dispatchEvent(new Event("change",{bubbles:true})));
+  }
+  await until(()=>!button("Read my timetable").disabled);
+}
+async function confirmRecords() {for(const check of [...document.querySelectorAll<HTMLLabelElement>(".review-check")]) if(/Course details checked|Session checked against/.test(check.textContent??"")) await act(async()=>check.querySelector<HTMLInputElement>("input")!.click());}
+const syntheticPage=(heading:string,pageNo:number,source="synthetic-timetable.pdf",code="QA1001"):ExtractionPage=>({
+  page:pageNo,source,method:"pdf-text",width:1000,height:700,text:heading+" Saturday "+code+" Lecture 08:00–09:30 A403",blocks:[],
+  words:[{text:heading,x:10,y:10,width:250,height:12,score:null},...["Saturday",code,"Lecture","08:00–09:30","A403"].map((text,i)=>({text,x:[10,140,280,400,600][i],y:80,width:text.length*7,height:12,score:null}))],
+});
 async function openEmpty() {
   await click("Open an empty workspace");
   await until(() => location.hash === "#today" && !!document.querySelector(".study-panel"));
@@ -97,6 +114,82 @@ async function expectNoHashChange(action: () => Promise<void>) {
 }
 
 describe("First-run navigation with real setup and IndexedDB", () => {
+  it("requires a deliberate university choice and keeps fresh academic fields neutral",async()=>{
+    await mount();await click("Upload your timetable");
+    expect(button("Egyptian Chinese University").getAttribute("aria-pressed")).toBe("false");expect(button("Another university").getAttribute("aria-pressed")).toBe("false");
+    for(const label of ["Program","Faculty / school","Academic level","Semester / term"]) expect(inputFor(label).value).toBe("");
+    expect(button("Enter courses & sessions manually").disabled).toBe(true);expect(button("Read my timetable").disabled).toBe(true);
+    await click("Another university");expect(inputFor("University name").value).toBe("");expect(button("Enter courses & sessions manually").disabled).toBe(false);
+  });
+  it("keeps detected context blank until explicitly confirmed",async()=>{
+    const {browserExtractor}=await import("./importer/extract");const spy=vi.spyOn(browserExtractor,"extract").mockResolvedValue([syntheticPage("Level 4 Semester 2",1)]);
+    try {
+      await mount();await click("Upload your timetable");await click("Another university");await uploadTimetable();await click("Read my timetable");await until(()=>!!document.querySelector(".review-content"));
+      expect(document.querySelector(".context-suggestions")?.textContent).toContain("Level 4 · Semester 2");expect(inputFor("Academic level").value).toBe("");
+      await click("Confirm",document.querySelector(".context-suggestion")!);expect(inputFor("Academic level").value).toBe("Level 4");expect(inputFor("Semester / term").value).toBe("Semester 2");
+      await confirmRecords();await click("Generate my semester");await until(()=>!!document.querySelector(".generated-space"));
+      const semester=(await db.settings.get("main"))?.semester;expect(semester?.level?.label).toBe("Level 4");expect(semester?.academicContext?.confirmed.level?.method).toBe("pdf-text");
+    } finally {spy.mockRestore();}
+  });
+  it("can leave detected context unknown and complete a timetable-only setup",async()=>{
+    const {browserExtractor}=await import("./importer/extract");const spy=vi.spyOn(browserExtractor,"extract").mockResolvedValue([syntheticPage("Level 3 Semester 2",1)]);
+    try {
+      await mount();await click("Upload your timetable");await click("Another university");await uploadTimetable();await click("Read my timetable");await until(()=>!!document.querySelector(".review-content"));
+      await click("Leave unknown");await confirmRecords();await click("Generate my semester");await until(()=>!!document.querySelector(".generated-space"));
+      const semester=(await db.settings.get("main"))?.semester;expect(semester?.level).toBeNull();expect(semester?.semester.name).toBe("My semester");expect(semester?.academicContext?.detected).toHaveLength(2);
+    } finally {spy.mockRestore();}
+  });
+  it("blocks a wrong selected plan page until the student deliberately keeps it",async()=>{
+    const {browserExtractor}=await import("./importer/extract");const timetable=syntheticPage("",1),wrong=syntheticPage("Level 2 Semester 1",4,"synthetic-plan.pdf"),other=syntheticPage("Level 1 Semester 1",9,"synthetic-plan.pdf");
+    const spy=vi.spyOn(browserExtractor,"extract").mockImplementation(async(file,options)=>{
+      if(file.name.includes("timetable")) return [timetable];
+      options.materialPlan!.onReview!(reviewMaterialPlanPages([wrong,other],options.materialPlan!.context!,["QA1001"],options.pages));return [wrong];
+    });
+    try {
+      await mount();await click("Upload your timetable");await click("Egyptian Chinese University");await fill("Academic level","Level 1");await fill("Semester / term","Semester 1");await uploadTimetable(true);await fill("Material plan PDF pages","4");await click("Read my timetable");await until(()=>!!document.querySelector(".plan-page-review"));
+      expect(document.querySelector(".plan-page-review")?.textContent).toContain("This page appears to describe Level 2 · Semester 1, but you selected Level 1 · Semester 1");expect(document.querySelector(".plan-page-review")?.textContent).toContain("likely match on page 9");
+      await confirmRecords();expect(button("Generate my semester").disabled).toBe(true);
+      await click("Keep selected page");expect(button("Generate my semester").disabled).toBe(false);expect(inputFor("Academic level").value).toBe("Level 1");
+      await click("Generate my semester");await until(()=>!!document.querySelector(".generated-space"));expect((await db.settings.get("main"))?.semester?.level?.label).toBe("Level 1");
+      expect(spy.mock.calls[1][1].pages).toEqual([4]);
+    } finally {spy.mockRestore();}
+  });
+  it("reads the suggested alternative only after the student chooses it",async()=>{
+    const {browserExtractor}=await import("./importer/extract");const wrong=syntheticPage("Level 2 Semester 1",4,"synthetic-plan.pdf"),other=syntheticPage("Level 1 Semester 1",9,"synthetic-plan.pdf");
+    const spy=vi.spyOn(browserExtractor,"extract").mockImplementation(async(file,options)=>{
+      if(file.name.includes("timetable")) return [syntheticPage("",1)];
+      options.materialPlan!.onReview!(reviewMaterialPlanPages([wrong,other],options.materialPlan!.context!,["QA1001"],options.pages));return options.pages?.includes(9)?[other]:[wrong];
+    });
+    try {
+      await mount();await click("Upload your timetable");await click("Egyptian Chinese University");await fill("Academic level","Level 1");await fill("Semester / term","Semester 1");await uploadTimetable(true);await fill("Material plan PDF pages","4");await click("Read my timetable");await until(()=>!!document.querySelector(".plan-page-review"));
+      await click("Use detected page");await until(()=>document.querySelector(".plan-page-review")?.textContent?.includes("selected PDF pages: 9")??false);
+      expect(spy.mock.calls[2][1].pages).toEqual([9]);expect(document.querySelector(".plan-page-review [role=alert]")).toBeNull();expect(inputFor("Academic level").value).toBe("Level 1");
+    } finally {spy.mockRestore();}
+  });
+  it("lets the student correct the university in review and removes ECU defaults",async()=>{
+    const {browserExtractor}=await import("./importer/extract");const spy=vi.spyOn(browserExtractor,"extract").mockResolvedValue([syntheticPage("",1,"synthetic-timetable.pdf","CSC2105")]);
+    try {
+      await mount();await click("Upload your timetable");await click("Egyptian Chinese University");await uploadTimetable();await click("Read my timetable");await until(()=>!!document.querySelector(".review-content"));
+      expect(inputFor("Official name").value).toBe("Artificial Intelligence");
+      const select=document.querySelector<HTMLSelectElement>(".academic-context-editor select")!;await act(async()=>{select.value="generic";select.dispatchEvent(new Event("change",{bubbles:true}));});
+      expect(inputFor("Official name").value).toBe("");expect(inputFor("Credit hours").value).toBe("");await fill("University name","Cairo University");await fill("Official name","My official title");await confirmRecords();await click("Generate my semester");await until(()=>!!document.querySelector(".generated-space"));
+      expect((await db.settings.get("main"))?.semester?.university).toMatchObject({adapterId:"generic",name:"Cairo University"});
+    } finally {spy.mockRestore();}
+  });
+  it("manual setup supports a custom university with unknown level and term",async()=>{
+    await mount();await click("Upload your timetable");await click("Another university");await fill("University name","Custom University");await click("Enter courses & sessions manually");await click("Add course");await fill("Course code","ART101");await fill("Official name","Studio Practice");await click("Add session");
+    for(const [label,value] of [["Weekday","5"],["Session type","tutorial"]]) {
+      const select=[...document.querySelectorAll("label")].find(l=>l.textContent?.startsWith(label))!.querySelector("select")!;
+      await act(async()=>{select.value=value;select.dispatchEvent(new Event("change",{bubbles:true}));});
+    }
+    await fill("Starts","14:00");await fill("Ends","16:00");await confirmRecords();expect(button("Generate my semester").disabled).toBe(false);
+    await click("Generate my semester");await until(()=>!!document.querySelector(".generated-space"));const semester=(await db.settings.get("main"))?.semester;
+    expect(semester).toMatchObject({origin:"manual",level:null,program:null,university:{name:"Custom University"},semester:{name:"My semester"}});expect(semester?.sessions).toHaveLength(1);
+  });
+  it("demo context does not initialize a subsequent real import",async()=>{
+    await initialize();await activateSemester(legacySemester("Demo Student",true),null);await mount("#setup");await click("Upload your timetable");
+    expect(button("Egyptian Chinese University").getAttribute("aria-pressed")).toBe("false");expect(inputFor("Your name").value).toBe("");expect(inputFor("Academic level").value).toBe("");expect(inputFor("Program").value).toBe("");
+  });
   it("makes workflow help accessible before setup without unlocking navigation", async () => {
     await mount(); await click("Help & getting started");
     const dialog=document.querySelector('[role="dialog"]')!;
@@ -118,7 +211,7 @@ describe("First-run navigation with real setup and IndexedDB", () => {
     const {browserExtractor}=await import("./importer/extract");
     const spy=vi.spyOn(browserExtractor,"extract");
     try {
-      await mount();await click("Upload your timetable");
+      await mount();await click("Upload your timetable");await click("Egyptian Chinese University");
       for (const [i,name] of ["synthetic-timetable.pdf","synthetic-plan.pdf"].entries()) {
         const input=document.querySelectorAll<HTMLInputElement>('input[type="file"]')[i];
         Object.defineProperty(input,"files",{value:[new File(["%PDF-1.4 test"],name,{type:"application/pdf"})]});
@@ -230,6 +323,7 @@ describe("First-run navigation with real setup and IndexedDB", () => {
   });
   it("a reviewed timetable generates a semester, unlocks navigation and enters Today", async () => {
     await mount(); await click("Upload your timetable");
+    await click("Another university");
     const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
     Object.defineProperty(input, "files", { value: [new File(["%PDF-1.4 synthetic fixture"], "synthetic-timetable.pdf", { type: "application/pdf" })] });
     await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));

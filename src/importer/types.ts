@@ -1,4 +1,5 @@
-import type { ExtractionConfidence, NormalizedSemester, Session } from "../lib/domain";
+import type { AcademicContextKey, ContextSuggestion, ExtractionConfidence, NormalizedSemester, Session } from "../lib/domain";
+import type { MaterialPlanReview } from "./page-selection";
 export interface ExtractedField<T> { value: T | null; confidence: ExtractionConfidence }
 export interface CandidateCourse {
   id: string;
@@ -22,6 +23,9 @@ export interface ImporterResult {
   sessions: CandidateSession[];
   warnings: string[];
   sources: {name:string;pages:number;method:"pdf-text" | "ocr"}[];
+  detectedContext?: ContextSuggestion[];
+  contextDecisions?: string[];
+  planReview?: MaterialPlanReview;
 }
 export interface ExtractionWord {
   text: string; x: number; y: number; width: number; height: number;
@@ -38,12 +42,14 @@ export interface AcademicContext {
   name: string; adapterId:string; program:string; level:string;
   semesterName:string; specialization:string;
   start:string | null; end:string | null;
+  universityName?: string; faculty?: string;
+  provenance?: Partial<Record<AcademicContextKey, ExtractionConfidence>>;
 }
 export interface DocumentExtractor {
   extract(file: File, options: {
     signal: AbortSignal; progress: (message:string)=>void;
     pages?: number[];
-    materialPlan?: { adapterId: string; courseCodes: string[] };
+    materialPlan?: { adapterId: string; courseCodes: string[]; context?: AcademicContext; onReview?: (review: MaterialPlanReview)=>void };
   }): Promise<ExtractionPage[]>;
 }
 export type ConfirmedSemester = NormalizedSemester;

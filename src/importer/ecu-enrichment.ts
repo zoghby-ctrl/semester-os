@@ -8,6 +8,7 @@ export function enrichECUCourse(course: CandidateCourse, context: ECUAcademicCon
   // Changing a catalog-backed code must not retain another code's defaults,
   // including when the new catalog entry has only a name.
   for (const key of ["name","credits","prerequisite","hours"] as const) if (out[key].confidence.method==="catalog") {out[key].value=null;out[key].confidence=field(null).confidence;}
+  if (context.adapterId && context.adapterId!=="ecu") return out;
   if (match.status==="unknown" && match.code) out.code.value=match.code;
   if (!match.entry) {
     if (match.status==="ambiguous" || match.corrected) {

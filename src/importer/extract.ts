@@ -2,7 +2,7 @@ import type { DocumentExtractor, ExtractionPage, ExtractionWord } from "./types"
 import { prepareOcrImage } from "./ocr-image";
 import { MAX_DOCUMENT_BYTES, sniffFormat, validateImageHeader } from "../lib/security";
 import { validateExtractionPages } from "./validation";
-import { selectedPdfPages } from "./page-selection";
+import { reviewMaterialPlanPages, selectedPdfPages } from "./page-selection";
 import { resolveECUCode } from "../universities/ecu-codes";
 import { getUniversityAdapter, matchCourseCodes } from "../universities";
 
@@ -116,7 +116,7 @@ export const browserExtractor: DocumentExtractor = {
       // A wide multilingual table is a poor single text block. Recognize the
       // English name column separately, keeping its source coordinates/scores.
       // Only use adapter geometry when the actual ruled column count matches.
-      if (layout && table?.columns.length === layout.columnCount + 1 && (!materialPlan?.courseCodes.length || materialPlan.courseCodes.some(code=>!resolveECUCode(code).entry))) {
+      if (layout && table?.columns.length === layout.columnCount + 1 && (!materialPlan?.courseCodes.length || materialPlan.courseCodes.some(code=>!resolveECUCode(code,materialPlan.context).entry))) {
         check(internal.signal);
         ocrMessage = `Reading course names on page ${page}`;
         progress(ocrMessage + "…");
@@ -136,6 +136,19 @@ export const browserExtractor: DocumentExtractor = {
           } finally { names.width = names.height = 1; }
         }
       }
+      // Cropping a ruled table must not erase its visible academic heading.
+      // Read only the small header strip on an already chosen scan; this never
+      // triggers full-page OCR merely to search for another semester.
+      if (materialPlan?.onReview && table && offsetY>=24) {
+        const heading=document.createElement("canvas");heading.width=prepared.canvas.width;heading.height=Math.min(offsetY,Math.ceil(prepared.canvas.height*.35));
+        try {
+          heading.getContext("2d")!.drawImage(prepared.canvas,0,0,heading.width,heading.height,0,0,heading.width,heading.height);
+          ocrMessage=`Reading academic heading on page ${page}`;progress(ocrMessage+"…");
+          await bounded(worker.setParameters({tessedit_pageseg_mode:"6" as import("tesseract.js").PSM}),internal.signal);
+          const headerWords=ocrWords((await bounded(worker.recognize(heading,{}, {text:true,blocks:true}),internal.signal)).data);
+          words=[...headerWords,...words];
+        } finally {heading.width=heading.height=1;}
+      }
       if (input !== prepared.canvas) input.width = input.height = 1;
       if (prepared.canvas !== canvas) prepared.canvas.width = prepared.canvas.height = 1;
       return {page,source:file.name,method:"ocr",width:canvas.width,height:canvas.height,text:words.map(w=>w.text).join(" "),words,table:prepared.table,blocks:materialPlan?[]:coloredBlocks(canvas),preview:await blobFromCanvas(canvas)};
@@ -148,13 +161,9 @@ export const browserExtractor: DocumentExtractor = {
         pdfjs.GlobalWorkerOptions.workerSrc=new URL("vendor/pdf/pdf.worker.min.mjs",document.baseURI).href;
         loading=pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),useSystemFonts:true,enableXfa:false,maxImageSize:40000000});
         const pdf=await bounded(loading.promise,internal.signal);
-        const selected = selectedPdfPages(pdf.numPages, selection);
-        const pages:ExtractionPage[]=[];
-        for(const pageNo of selected) {
-          check(internal.signal);progress(`Reading PDF page ${pageNo} of ${pdf.numPages}…`);
-          const page=await bounded(pdf.getPage(pageNo),internal.signal);
-          let canvas: HTMLCanvasElement | undefined;
-          try {
+        let selected = selectedPdfPages(pdf.numPages, selection);
+        const textIndex=new Map<number,ExtractionPage>();
+        const readText=async(page:import("pdfjs-dist").PDFPageProxy,pageNo:number):Promise<ExtractionPage>=>{
           const viewport=page.getViewport({scale:1});
           const content=await bounded(page.getTextContent(),internal.signal);
           if (content.items.length > 20000) throw new Error("This PDF page contains too much text. Upload only the relevant pages.");
@@ -162,12 +171,38 @@ export const browserExtractor: DocumentExtractor = {
             const transform=pdfjs.Util.transform(viewport.transform,item.transform);
             return {text:item.str,x:transform[4],y:transform[5]-Math.abs(transform[3]),width:item.width,height:Math.abs(transform[3]) || item.height,score:null};
           });
-          const text=words.map(w=>w.text).join(" ");
-          const detectedCodes = adapter ? matchCourseCodes(adapter, text) : [];
-          const selectable = text.replace(/\s/g,"").length >= 30 && (words.length >= 12 || !!materialPlan && words.length >= 3 && detectedCodes.length > 0);
+          return {page:pageNo,source:file.name,method:"pdf-text",width:viewport.width,height:viewport.height,text:words.map(w=>w.text).join(" "),words,blocks:[]};
+        };
+        if (materialPlan?.context && materialPlan.onReview) {
+          // A short PDF can be indexed cheaply for alternative page suggestions.
+          // Long PDFs stay bounded to the user's selection. No index page is
+          // rendered or OCRed merely to discover its heading.
+          const inspect=pdf.numPages<=20 ? selectedPdfPages(pdf.numPages) : selected;
+          for (const pageNo of inspect) {
+            check(internal.signal);progress(`Checking material-plan headings on page ${pageNo}…`);
+            const page=await bounded(pdf.getPage(pageNo),internal.signal);
+            try {textIndex.set(pageNo,await readText(page,pageNo));} finally {page.cleanup();}
+          }
+          const indexed=validateExtractionPages([...textIndex.values()]);
+          const review=reviewMaterialPlanPages(indexed,materialPlan.context,materialPlan.courseCodes,selection);
+          // Scanned pages without positive text evidence remain uncertain.
+          selected=review.usedPages;materialPlan.onReview(review);
+          if (!selected.length) progress("No compatible plan page was identified. Choose a page or review your context.");
+        }
+        const pages:ExtractionPage[]=[];
+        for(const pageNo of selected) {
+          check(internal.signal);progress(`Reading PDF page ${pageNo} of ${pdf.numPages}…`);
+          const page=await bounded(pdf.getPage(pageNo),internal.signal);
+          let canvas: HTMLCanvasElement | undefined;
+          try {
+          const viewport=page.getViewport({scale:1});
+          const {words,text}=textIndex.get(pageNo)??await readText(page,pageNo);
+          const detectedCodes = matchCourseCodes(adapter??getUniversityAdapter("generic"),text);
+          const hasStructuredText=detectedCodes.length>0 && (!!materialPlan || /\b\d{1,2}[:.]\d{2}\b/.test(text));
+          const selectable = text.replace(/\s/g,"").length >= 30 && (words.length >= 12 || hasStructuredText);
           // Skip only positively identified other-course text pages. Pages with
           // no codes still need the normal extraction path.
-          if (selectable && materialPlan?.courseCodes.length && detectedCodes.length && !detectedCodes.some(code => materialPlan.courseCodes.includes(code))) {
+          if (!selection && !materialPlan?.onReview && selectable && materialPlan?.courseCodes.length && detectedCodes.length && !detectedCodes.some(code => materialPlan.courseCodes.includes(code))) {
             progress(`Skipping material-plan page ${pageNo}: no matching timetable codes.`);
             continue;
           }
@@ -183,7 +218,14 @@ export const browserExtractor: DocumentExtractor = {
           else pages.push(await recognize(canvas,pageNo));
           } finally { page.cleanup(); if(canvas) canvas.width=canvas.height=1; }
         }
-        return validateExtractionPages(pages);
+        const extracted=validateExtractionPages(pages);
+        if (materialPlan?.context && materialPlan.onReview) {
+          // OCR can supply headings absent from the text index. Keep rendered
+          // selections fixed; the new evidence only creates review suggestions.
+          const review=reviewMaterialPlanPages([...textIndex.values()].map(p=>extracted.find(e=>e.page===p.page)??p),materialPlan.context,materialPlan.courseCodes,selection);
+          review.usedPages=selected;materialPlan.onReview(review);
+        }
+        return extracted;
       }
       const pendingBitmap = createImageBitmap(file);
       pendingBitmap.then(image => { if (internal.signal.aborted) image.close(); }).catch(() => {});
@@ -193,7 +235,14 @@ export const browserExtractor: DocumentExtractor = {
       const canvas=document.createElement("canvas");canvas.width=Math.ceil(bitmap.width*scale);canvas.height=Math.ceil(bitmap.height*scale);
       const ctx=canvas.getContext("2d");if(!ctx) {bitmap.close();throw new Error("Image reading is unavailable. Try a PDF or enter sessions manually.");}
       ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
-      try { return validateExtractionPages([await recognize(canvas,1)]); }
+      try {
+        const pages=validateExtractionPages([await recognize(canvas,1)]);
+        if (materialPlan?.context && materialPlan.onReview) {
+          const review=reviewMaterialPlanPages(pages,materialPlan.context,materialPlan.courseCodes);
+          review.usedPages=[1];materialPlan.onReview(review);
+        }
+        return pages;
+      }
       finally { canvas.width=canvas.height=1; }
     } catch(error) {
       if(internal.signal.aborted) {

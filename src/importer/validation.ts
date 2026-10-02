@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { confidenceSchema, idSchema, timeSchema } from "../lib/domain";
+import { confidenceSchema, contextSuggestionSchema, idSchema, timeSchema } from "../lib/domain";
+import { materialPlanReviewSchema } from "./page-selection";
 import { assertPlainData } from "../lib/security";
 import type { ExtractionPage, ImporterResult } from "./types";
 const dimension = z.number().finite().positive().max(100000);
@@ -14,6 +15,9 @@ export function validateExtractionPages(pages: ExtractionPage[]) {
 const field = <T extends z.ZodTypeAny>(value: T) => z.object({ value: value.nullable(), confidence: confidenceSchema });
 export const importerResultSchema = z.object({
   schemaVersion: z.literal(1), adapterId: idSchema,
+  detectedContext:z.array(contextSuggestionSchema).max(640).optional(),
+  contextDecisions:z.array(z.string().max(500)).max(640).optional(),
+  planReview:materialPlanReviewSchema.optional(),
   courses: z.array(z.object({ id: idSchema, code: field(z.string().min(1).max(40)), name: field(z.string().max(200)), credits: field(z.number().min(0).max(30)), prerequisite: field(z.object({ code: z.string().max(100), name: z.string().max(200) })), hours: field(z.object({ lecture: z.number().min(0).max(50), lab: z.number().min(0).max(50), tutorial: z.number().min(0).max(50) })), reviewed: z.boolean() })).max(100),
   sessions: z.array(z.object({ id: idSchema, courseId: idSchema, day: field(z.number().int().min(0).max(6)), type: field(z.enum(["lecture", "lab", "tutorial"])), start: field(timeSchema), end: field(timeSchema), room: field(z.string().max(100)), reviewed: z.boolean() })).max(500),
   warnings: z.array(z.string().max(1000)).max(1000), sources: z.array(z.object({ name: z.string().max(255), pages: z.number().int().min(1).max(500), method: z.enum(["pdf-text", "ocr"]) })).max(40),

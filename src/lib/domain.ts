@@ -17,6 +17,20 @@ export const confidenceSchema = z.object({
   page: z.number().int().min(1).nullable().default(null),
 });
 export type ExtractionConfidence = z.infer<typeof confidenceSchema>;
+export const academicContextKeySchema = z.enum(["universityName", "faculty", "program", "level", "semesterName", "specialization", "start", "end"]);
+export type AcademicContextKey = z.infer<typeof academicContextKeySchema>;
+export const contextSuggestionSchema = z.object({
+  id: z.string().max(500), key: academicContextKeySchema, value: z.string().min(1).max(200),
+  confidence: confidenceSchema, document: z.enum(["timetable", "material-plan"]),
+});
+export type ContextSuggestion = z.infer<typeof contextSuggestionSchema>;
+// Additive v1 semester / v2 backup metadata. Absence means historical context
+// has no recorded evidence; migration must not invent or reinterpret it.
+export const academicContextEvidenceSchema = z.object({
+  faculty: z.string().max(200).nullable(), specialization: z.string().max(200).nullable(),
+  confirmed: z.record(academicContextKeySchema, confidenceSchema),
+  detected: z.array(contextSuggestionSchema).max(640),
+});
 export const studentProfileSchema = z.object({ id: idSchema, displayName: z.string().max(50) });
 export type StudentProfile = z.infer<typeof studentProfileSchema>;
 export const universityProfileSchema = z.object({ id: idSchema, name: z.string().min(1).max(200), adapterId: idSchema });
@@ -63,6 +77,7 @@ export const normalizedSemesterSchema = z.object({
   university: universityProfileSchema,
   program: academicProgramSchema.nullable(),
   level: academicLevelSchema.nullable(),
+  academicContext: academicContextEvidenceSchema.optional(),
   semester: semesterSchema,
   courses: z.array(courseSchema).max(100),
   offerings: z.array(courseOfferingSchema).max(200),

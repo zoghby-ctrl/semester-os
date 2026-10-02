@@ -1,6 +1,18 @@
 # Validation — October 2, 2026
 
-## First-run navigation continuation
+## Product generalization — current local continuation
+
+The clean current baseline at `7017edb` was verified before editing: **194 tests in 20 files** and the complete verification pipeline passed. The university-first continuation retains every baseline test and adds **71 regressions**, for **265 passing tests in 21 files**. The full assumption audit, implementation, exact changed-file list, validation matrix, and remaining limits are in [the product-generalization report](docs/PRODUCT_GENERALIZATION.md).
+
+Lint, the explicit `npm run typecheck`, production/PWA build, both dependency audits with zero vulnerabilities, security scan, repository audit (149 files), Pages artifact checks (52 files), and the final complete `npm run verify` all passed. Exact results are recorded in the linked report. No dependency, backend, account, remote OCR, AI API, cloud storage, or telemetry was added. Schema versions and historical workspace interpretation remain unchanged; academic context evidence is optional additive data.
+
+**50 production Chromium scenarios passed** using isolated synthetic fixtures. All requested widths—1440, 900, 390, and 320—cover neutral fresh setup, generic/custom universities, ECU Level 1 and Level 2, another ECU level, unknown context, timetable-only and timetable/plan imports, explicit wrong-page keep/use decisions, automatic page suggestions, manual entry, existing ECU workspace restoration, and offline reopen. Context confirmation remains explicit. There were no application exceptions or horizontal overflow. Manual mobile review exposed an overlapping source panel; scoped positioning now passes actual pointer interaction at all four widths.
+
+Two additional scenarios in that 50-scenario total exercise actual local English OCR of timetable/plan images, including a cropped table's academic heading strip. They preserve code-first enrichment, leave detected level/term unconfirmed, and make zero remote requests. Existing owner-format v2 backups preserve all six courses, eleven sessions, attendance, notes, planner items, topics, study history, recovery, and exact settings across restore and controlled offline reload. Midnight, Campus, Focus, and Prism are included; protected theme/rendering files are unchanged.
+
+The actual owner's private documents/backup were not attached to this continuation. Compatibility used the existing schema and retained historical fixtures; synthetic OCR success does not establish every real document's accuracy. No commit, push, deployment, tag, or release was performed. The implementation awaits owner review.
+
+## Earlier first-run navigation continuation
 
 The published main baseline at eff1c2c was rechecked from a clean working tree: 123 tests in 14 files and the complete verify pipeline pass. The public GitHub repository is verified, main's hosted CI passed, and the live beta passes all 34 HTTP route/asset checks. The earlier legal-route deployment fault is resolved. Private vulnerability reporting is verified disabled. No source license is selected.
 

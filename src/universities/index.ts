@@ -22,12 +22,12 @@ export const ECUAdapter: UniversityAdapter = {
   courseCodePattern: /\b[A-Z]{2,4}\s*\d{4}\b/gi,
   roomPattern: /\b[A-Z]\s*\d{3,4}\b/gi,
   materialPlanTable: {columnCount:12,name:1,credits:10,prerequisite:11,lecture:9,lab:7,tutorial:8},
-  importHelp: "Upload your ECU schedule. Review the detected courses, rooms, session types, and exact times. Recognized codes use editable defaults from the local ECU catalog (Computer Science, Level 2 / Semester 1, plus named prerequisite references). Check your current official plan; an optional material plan supplies details for other codes.",
+  importHelp: "ECU is the first enhanced adapter: selected timetable layouts and one detected 12-column plan format. A limited verified Computer Science catalog can enrich exact known codes when your context is compatible. Other programs, levels, terms, and unknown codes use your documents and editable fields; enhanced curriculum coverage is not claimed.",
 };
 export const GenericAdapter: UniversityAdapter = {
   ...shared,
   id: "generic",
-  profile: { id: "generic", name: "Other university / generic schedule", adapterId: "generic" },
+  profile: { id: "generic", name: "University not supplied", adapterId: "generic" },
   courseCodePattern: /\b[A-Z]{2,6}[ -]?\d{2,6}\b/gi,
   roomPattern: /\b(?:[A-Z]\s*\d{2,4}|(?:room|hall)\s+[A-Z0-9-]+)\b/gi,
   importHelp: "English timetable grids and rows with a day, course code, and time range are supported. Review the results against your original document.",

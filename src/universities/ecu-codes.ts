@@ -1,6 +1,6 @@
 import { ecuCourseCatalog, type ECUCatalog, type ECUCatalogEntry } from "../data/ecu-catalog";
 
-export interface ECUAcademicContext { level?: string; semesterName?: string }
+export interface ECUAcademicContext { adapterId?: string; universityName?: string; program?: string; faculty?: string; level?: string; semesterName?: string }
 export interface ECUCodeResolution {
   raw: string; code: string | null; entry: ECUCatalogEntry | null;
   status: "exact" | "normalized" | "unknown" | "ambiguous" | "invalid";
@@ -8,14 +8,17 @@ export interface ECUCodeResolution {
 }
 const separators = /[\s._,:-]/g;
 const contextNumber = (value: string | undefined, kind: "level" | "semester") => {
-  const match = value?.trim().match(kind === "level" ? /^(?:(?:level|year)\s*)?(\d{1,2})$/i : /^(?:(?:semester|sem)\s*)?(\d{1,2})$/i);
+  const match = value?.trim().match(kind === "level" ? /^(?:(?:level|year)\s*)?(\d{1,2})$/i : /^(?:(?:semester|sem|term)\s*)?(\d{1,2})$/i);
   return match ? Number(match[1]) : undefined;
 };
 function narrow(entries: readonly ECUCatalogEntry[], context: ECUAcademicContext) {
-  if (entries.length < 2) return entries;
+  if (context.adapterId && context.adapterId!=="ecu") return [];
+  if (context.universityName?.trim() && !/^Egyptian Chinese University$/i.test(context.universityName.trim())) return [];
   const level=contextNumber(context.level,"level"),semester=contextNumber(context.semesterName,"semester");
-  const matched=entries.filter(e=>(level===undefined||e.level===undefined||e.level===level)&&(semester===undefined||e.semester===undefined||e.semester===semester));
-  return matched.length ? matched : entries; // Conflicting context must not force a guess.
+  const program=(context.program?.trim() || context.faculty?.trim() || "").toLowerCase();
+  return entries.filter(e=>(!program || !e.program || [e.program.toLowerCase(),"cs"].includes(program))
+    && (!context.level?.trim() || e.level===undefined || level===e.level)
+    && (!context.semesterName?.trim() || e.semester===undefined || semester===e.semester));
 }
 
 export function resolveECUCode(raw: string, context: ECUAcademicContext = {}, catalog: ECUCatalog = ecuCourseCatalog): ECUCodeResolution {

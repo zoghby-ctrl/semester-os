@@ -1,6 +1,6 @@
 # Semester OS
 
-Your timetable, courses, attendance, plans, notes, study time, and progress in one personal semester workspace. **Local-first. Accountless. Built for a semester you can make your own.**
+Semester OS turns your university timetable and academic plan into a personal academic operating system. Your courses, attendance, plans, notes, study time, and progress share one personal workspace. **Local-first. Accountless. Built for a semester you can make your own.**
 
 [Try the live beta](https://semester-os-4y6.pages.dev) · [Public repository](https://github.com/zoghby-ctrl/semester-os) · [Setup and development](#installation-and-development) · [Contributing](CONTRIBUTING.md) · [Security reporting](SECURITY.md)
 
@@ -25,19 +25,25 @@ Attendance is recorded manually. There is no GPS or automatic presence detection
 
 [Phone layouts and all reviewed screenshots](docs/screenshots/README.md) use an empty or anonymous labelled demo workspace. They contain no personal name, student ID, email, account details, or local filesystem path.
 
-## ECU importer
+## University timetable importer
 
 Fresh installations start empty. You can explore the optional **Demo Semester**, enter courses manually, or build a semester from your own authorized documents:
 
-1. Choose ECU or the generic English timetable adapter and enter any academic context you know.
+1. Choose **Egyptian Chinese University** for enhanced document recognition or **Another university** for the universal timetable importer. Fresh setup has no preselected university, program, level, or term.
 2. Select a timetable PDF or image. A material-plan PDF/image is optional.
 3. Local PDF text extraction or English OCR produces an editable draft alongside a source preview.
-4. Check course names, weekdays, times, rooms, credits, prerequisites, and uncertain fields. Confirm each course and session.
+4. Check course names, weekdays, times, rooms, credits, prerequisites, and uncertain fields. Detected academic headings remain separate suggestions: confirm, change, or leave them unknown. Confirm each course and session.
 5. Generate your semester. Replacing an existing workspace creates a local recovery point first.
 
 Before first-run setup is complete, workspace navigation is visibly locked and explains how to unlock it. Upload and review a timetable, explore the labelled demo, or open an empty workspace. Navigation unlocks as soon as completion is saved; configured users can return to Setup without losing navigation access.
 
 Recognition depends on the document and can be wrong, especially with image quality, unfamiliar layouts, or time placement. Missing information remains unknown. Successful checks of particular documents do not establish an OCR accuracy rate. Always review the draft against your university's official timetable.
+
+Works with university timetables generally, with enhanced recognition for selected document formats. ECU is the first enhanced adapter; this does not establish support for every ECU faculty or curriculum. Both flows accept optional university name (generic), faculty/school, program, any level/year, any semester/term, specialization, and dates. Leave anything you don’t know blank.
+
+Explicit material-plan PDF page selections are honored, including pages with different course codes. Short PDFs are indexed from selectable text to suggest likely matches before rendering; long PDFs require a bounded selection. Visible headings supply context evidence. Your entered context only filters candidates; course codes, catalog scope, demo data, and page position never prove a level or term. Page conflicts require review: keep the selected page deliberately, use a suggested page, or choose another page. Nothing silently changes your selection.
+
+The local ECU catalog contains **six verified complete Computer Science Level 2 / Semester 1 records and four name-only prerequisite references**. It is metadata, not the full ECU curriculum or an enrollment list. Compatible ECU context and a verified code can supply editable canonical values; unknown/ambiguous codes and incompatible levels, terms, or programs retain document/manual values. Generic universities receive no ECU metadata. [Generalization audit and validation](docs/PRODUCT_GENERALIZATION.md) records the boundaries.
 
 Documents are processed by same-origin PDF/OCR workers on the device. There is no remote OCR, AI upload, or student-document server.
 
@@ -80,7 +86,7 @@ node serve.mjs
 Open [http://127.0.0.1:4173](http://127.0.0.1:4173). On Windows, **Start Semester OS.cmd** starts this server. Serve over HTTP; opening the built HTML file directly will not provide the application environment.
 
 ```sh
-npm test                 # complete suite: 139 tests in 15 files
+npm test                 # complete suite: 265 tests in 21 files
 npm run lint
 npm run typecheck        # strict TypeScript
 npm run build            # dist/ with PWA, Pages headers and routes
@@ -118,7 +124,7 @@ Report vulnerabilities privately using the channel described in [SECURITY.md](SE
 
 The live beta is [semester-os-4y6.pages.dev](https://semester-os-4y6.pages.dev). The optional `semesteros.is-a.dev` alias remains pending its is-a.dev PR merge and Cloudflare custom-domain setup; it is not a production address.
 
-The published baseline passes 123 tests; the local first-run navigation update adds 16 UI regressions for 139 tests across 15 files. Lint, strict TypeScript, production/PWA, dependency and security/privacy gates are recorded in validation. Hosted main CI has passed for the published baseline, and the live beta passes 34 HTTP route/asset checks, including both public legal routes. The new navigation update needs pushing and redeployment to reach users. Browser checks cover 1440, 900, 390, and 320 pixels. These checks do not establish production readiness, legal approval, penetration-test certification, or all-device OCR/PWA reliability.
+The current local product-generalization pass retains the verified 194-test code-first baseline and passes **265 tests across 21 files**, alongside lint, strict TypeScript, production/PWA, dependency and security/privacy gates. Production-browser checks cover 1440, 900, 390, and 320 pixels. This continuation has not been committed, pushed, or deployed; published-source and hosted validation from earlier milestones do not verify these local changes. These checks do not establish production readiness, legal approval, penetration-test certification, or all-device OCR/PWA reliability.
 
 **No source license has been selected.** The repository is publicly available, but source availability does not imply permission to reuse, modify, or redistribute the code. No license or legal guarantee is inferred from publication. Third-party dependencies retain their own licenses.
 

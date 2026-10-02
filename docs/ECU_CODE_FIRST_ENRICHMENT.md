@@ -1,5 +1,7 @@
 # ECU code-first material-plan enrichment
 
+This is the historical code-first milestone. The subsequent [product generalization pass](PRODUCT_GENERALIZATION.md) preserves canonical enrichment and tightens the scope checks for all entries, adds neutral onboarding/context review, and honors explicit page selections. Its current validation supersedes the counts and context-narrowing behavior recorded below.
+
 October 2, 2026. Local changes on the existing main checkout, HEAD 6731fcd. No commit, push or deployment performed. Earlier beta import performance and student guidance changes remain in the working tree.
 
 ## Catalog and source

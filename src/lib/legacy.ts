@@ -22,6 +22,8 @@ export function migrateSettings(input: unknown): Settings {
   if (!input || typeof input !== "object") throw new Error("Saved preferences are malformed. Your stored data has been retained.");
   const value = input as Record<string, unknown>;
   if (value.schemaVersion !== undefined && value.schemaVersion !== 2) throw new Error("This workspace uses a newer unsupported data version.");
+  // Additive academicContext evidence is optional. Existing v2 semesters retain
+  // their values and absent evidence exactly; no catalog/context re-inference.
   if (value.schemaVersion === 2) return settingsSchema.parse(input);
   if (typeof value.name !== "string" || !Array.isArray(value.schedule) || value.schedule.length !== 11)
     throw new Error("The old workspace could not be safely migrated. Your stored data has been retained.");
