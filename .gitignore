@@ -1,0 +1,57 @@
+# Default deny: new root folders/files need a deliberate repository review.
+/*
+!/.gitignore
+!/.env.example
+!/.node-version
+!/package.json
+!/package-lock.json
+!/tsconfig.json
+!/vite.config.ts
+!/eslint.config.mjs
+!/index.html
+!/serve.mjs
+!/Start Semester OS.cmd
+!/README.md
+!/CONTRIBUTING.md
+!/SECURITY.md
+!/VALIDATION.md
+!/.github/
+!/.github/**
+!/src/
+!/src/**
+!/scripts/
+!/scripts/**
+!/docs/
+!/docs/**
+!/public/
+/public/*
+!/public/icon.svg
+!/public/icon-192.png
+!/public/icon-512.png
+!/public/icon-maskable.png
+
+# Documents and exported evidence never belong in source control.
+**/.env
+**/.env.*
+!/.env.example
+**/*.log
+**/*.tsbuildinfo
+**/*.pdf
+**/*.zip
+**/*.bak
+**/*backup*.json
+**/*recovery*.json
+**/.DS_Store
+**/node_modules/
+**/.wrangler/
+
+# Only these reviewed empty/demo/policy screenshots are eligible.
+/docs/screenshots/*
+!/docs/screenshots/README.md
+!/docs/screenshots/welcome-desktop.png
+!/docs/screenshots/today-desktop.png
+!/docs/screenshots/schedule-desktop.png
+!/docs/screenshots/appearance-desktop.png
+!/docs/screenshots/today-mobile.png
+!/docs/screenshots/appearance-light-mobile.png
+!/docs/screenshots/privacy-desktop.png
