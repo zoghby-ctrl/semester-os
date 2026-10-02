@@ -41,6 +41,7 @@ interface Data {
   view: string;
 }
 const Context = createContext<Data | null>(null);
+export const setupNavigationHint = "Finish setup or open an empty workspace first.";
 export const useApp = () => {
   const value = useContext(Context);
   if (!value) throw new Error("Missing Semester OS context");
@@ -118,9 +119,13 @@ export function Provider({ children }: { children: ReactNode }) {
     },
     [toast],
   );
+  const onboardingComplete = data && !("invalid" in data) ? data.settings.onboardingComplete : false;
   const navigate = useCallback((target: string) => {
+    // Admit app navigation before touching the hash. Direct URL changes still
+    // use App's existing setup guard, while UI actions never bounce routes.
+    if (!onboardingComplete && target.split("/")[0] !== "setup") return;
     location.hash = target;
-  }, []);
+  }, [onboardingComplete]);
   if (error || data && "invalid" in data) return <StorageRecovery />;
   if (!data)
     return (

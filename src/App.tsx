@@ -20,9 +20,11 @@ import {
   WifiOff,
   CheckCircle2,
   Clock,
+  LockKeyhole,
+  Upload,
 } from "lucide-react";
 import { days, category, type Session } from "./data/academic";
-import { useApp } from "./lib/context";
+import { setupNavigationHint, useApp } from "./lib/context";
 import {
   addDays,
   formatTime,
@@ -85,6 +87,12 @@ export default function App() {
       ),
   });
   const section = view.split("/")[0];
+  const workspaceLocked = !settings.onboardingComplete;
+  const lockedNavigation = workspaceLocked ? {
+    "aria-disabled": true as const,
+    "aria-describedby": "workspace-navigation-hint",
+    title: setupNavigationHint,
+  } : {};
   const theme = useMemo(() => getThemeDefinition(settings.theme, settings.customTheme), [settings.theme, settings.customTheme]);
   const noMotion = settings.reduceMotion || reduced;
   useEffect(() => {
@@ -203,6 +211,7 @@ export default function App() {
     if (result.outcome === "accepted") setInstallPrompt(null);
   };
   const quick = (mode: "auto" | "attended" | "late") => {
+    if (workspaceLocked) return;
     const next =
       mode === "auto"
         ? sessionWindow(now, settings).next
@@ -234,6 +243,7 @@ export default function App() {
         <aside className="sidebar">
           <button
             className="brand"
+            {...lockedNavigation}
             onClick={() => navigate("today")}
             aria-label="Semester OS home"
           >
@@ -250,26 +260,29 @@ export default function App() {
           </button>
           <div className="nav-label">WORKSPACE</div>
           <nav aria-label="Main navigation">
+            {workspaceLocked && <button className="nav-item active" aria-current="page" onClick={() => navigate("setup")}><Upload size={18} /><span>Setup</span><i /></button>}
             {navigation.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
-                className={`nav-item ${section === id ? "active" : ""}`}
-                aria-current={section === id ? "page" : undefined}
+                className={`nav-item ${!workspaceLocked && section === id ? "active" : ""}`}
+                aria-current={!workspaceLocked && section === id ? "page" : undefined}
+                {...lockedNavigation}
                 onClick={() => navigate(id)}
               >
                 <Icon size={18} />
                 <span>{label}</span>
-                {section === id && <i />}
+                {workspaceLocked ? <LockKeyhole size={12} className="navigation-lock" aria-hidden="true" /> : section === id && <i />}
               </button>
             ))}
           </nav>
+          {workspaceLocked && <p id="workspace-navigation-hint" className="navigation-lock-note"><LockKeyhole size={13} aria-hidden="true" /><span>{setupNavigationHint}</span></p>}
           <div className="sidebar-course-label">
             <span>THIS SEMESTER</span>
             <span>{String(courses.length).padStart(2, "0")}</span>
           </div>
           <div className="sidebar-courses">
             {courses.map((c) => (
-              <button key={c.id} onClick={() => navigate(`courses/${c.id}`)}>
+              <button key={c.id} {...lockedNavigation} onClick={() => navigate(`courses/${c.id}`)}>
                 <i style={{ background: c.color }} />
                 <span>{c.shortName}</span>
               </button>
@@ -278,6 +291,7 @@ export default function App() {
           <div className="sidebar-bottom">
             <button
               className="theme-shortcut"
+              {...lockedNavigation}
               onClick={() => navigate("settings")}
             >
               <Sparkles size={16} />
@@ -293,8 +307,9 @@ export default function App() {
               </span>
             </button>
             <button
-              className={`nav-item ${section === "settings" ? "active" : ""}`}
-              aria-current={section === "settings" ? "page" : undefined}
+              className={`nav-item ${!workspaceLocked && section === "settings" ? "active" : ""}`}
+              aria-current={!workspaceLocked && section === "settings" ? "page" : undefined}
+              {...lockedNavigation}
               onClick={() => navigate("settings")}
             >
               <Settings size={18} />
@@ -302,6 +317,7 @@ export default function App() {
             </button>
             <button
               className="user-profile"
+              {...lockedNavigation}
               onClick={() => navigate("settings")}
             >
               <span className="avatar">
@@ -421,21 +437,25 @@ export default function App() {
         {navigation.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
-            className={section === id ? "active" : ""}
-            aria-current={section === id ? "page" : undefined}
+            className={!workspaceLocked && section === id ? "active" : ""}
+            aria-current={!workspaceLocked && section === id ? "page" : undefined}
+            {...lockedNavigation}
             onClick={() => navigate(id)}
           >
             <Icon size={20} />
             <span>{label}</span>
+            {workspaceLocked && <LockKeyhole size={9} className="navigation-lock" aria-hidden="true" />}
           </button>
         ))}
         <button
-          className={section === "settings" ? "active" : ""}
+          className={!workspaceLocked && section === "settings" ? "active" : ""}
+          {...lockedNavigation}
           onClick={() => navigate("settings")}
-          aria-current={section === "settings" ? "page" : undefined}
+          aria-current={!workspaceLocked && section === "settings" ? "page" : undefined}
         >
           <Settings size={20} />
           <span>Settings</span>
+          {workspaceLocked && <LockKeyhole size={9} className="navigation-lock" aria-hidden="true" />}
         </button>
       </nav>
       <Modal
@@ -445,6 +465,7 @@ export default function App() {
         wide
       >
         <Command label="Semester OS command palette" className="command-menu">
+          {workspaceLocked && <p className="command-setup-note"><LockKeyhole size={13} aria-hidden="true" />{setupNavigationHint}</p>}
           <div className="command-search">
             <Search size={19} />
             <Command.Input
@@ -458,12 +479,15 @@ export default function App() {
             </Command.Empty>
             <Command.Group heading="Go to">
               {[
+                ...(workspaceLocked ? [{ id: "setup", label: "Setup", icon: Upload }] : []),
                 ...navigation,
                 { id: "settings", label: "Settings", icon: Settings },
               ].map(({ id, label, icon: Icon }) => (
                 <Command.Item
                   key={id}
                   value={`${label} page`}
+                  disabled={workspaceLocked && id !== "setup"}
+                  {...(id !== "setup" ? lockedNavigation : {})}
                   onSelect={() => {
                     navigate(id);
                     setPalette(false);
@@ -471,13 +495,15 @@ export default function App() {
                 >
                   <Icon size={17} />
                   {label}
-                  <span className="command-hint">Open</span>
+                  <span className="command-hint">{workspaceLocked && id !== "setup" ? "After setup" : "Open"}</span>
                 </Command.Item>
               ))}
             </Command.Group>
             <Command.Group heading="Quick actions">
               <Command.Item
                 value="check in attendance mark attended"
+                disabled={workspaceLocked}
+                {...lockedNavigation}
                 onSelect={() => quick("attended")}
               >
                 <CheckCircle2 size={17} />
@@ -485,6 +511,8 @@ export default function App() {
               </Command.Item>
               <Command.Item
                 value="mark late arrival lateness"
+                disabled={workspaceLocked}
+                {...lockedNavigation}
                 onSelect={() => quick("late")}
               >
                 <Clock size={17} />
@@ -492,6 +520,8 @@ export default function App() {
               </Command.Item>
               <Command.Item
                 value="next class current class show session"
+                disabled={workspaceLocked}
+                {...lockedNavigation}
                 onSelect={() => quick("auto")}
               >
                 <Sun size={17} />
@@ -499,6 +529,8 @@ export default function App() {
               </Command.Item>
               <Command.Item
                 value="planner assignments exams deadlines calendar"
+                disabled={workspaceLocked}
+                {...lockedNavigation}
                 onSelect={() => {
                   navigate("planner");
                   setPalette(false);
@@ -513,6 +545,8 @@ export default function App() {
                 <Command.Item
                   key={c.id}
                   value={`${c.code} ${c.name} open course`}
+                  disabled={workspaceLocked}
+                  {...lockedNavigation}
                   onSelect={() => {
                     navigate(`courses/${c.id}`);
                     setPalette(false);
@@ -532,6 +566,8 @@ export default function App() {
                 <Command.Item
                   key={r}
                   value={`room ${r}`}
+                  disabled={workspaceLocked}
+                  {...lockedNavigation}
                   onSelect={() => {
                     setRoom(r);
                     setPalette(false);
@@ -564,6 +600,7 @@ export default function App() {
         title="A few useful shortcuts"
         description="Move around your semester without leaving the keyboard."
       >
+        {workspaceLocked && <p className="command-setup-note"><LockKeyhole size={13} aria-hidden="true" />Workspace shortcuts unlock after setup. Search and help remain available.</p>}
         <div className="shortcut-list">
           <div>
             <span>Search & quick actions</span>
@@ -588,6 +625,8 @@ export default function App() {
         </div>
         <button
           className="button secondary full"
+          disabled={workspaceLocked}
+          {...lockedNavigation}
           onClick={() => {
             setHelp(false);
             navigate("planner");

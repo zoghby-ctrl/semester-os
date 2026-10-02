@@ -1,6 +1,16 @@
 # Validation — October 2, 2026
 
-## Final pre-public-push polish
+## First-run navigation continuation
+
+The published main baseline at eff1c2c was rechecked from a clean working tree: 123 tests in 14 files and the complete verify pipeline pass. The public GitHub repository is verified, main's hosted CI passed, and the live beta passes all 34 HTTP route/asset checks. The earlier legal-route deployment fault is resolved. Private vulnerability reporting is verified disabled. No source license is selected.
+
+This continuation adds 16 real App/Provider/setup/persistence regressions: **139 tests pass across 15 files**. Lint, direct strict typecheck, production/PWA build, both dependency audits (zero vulnerabilities), security scan, repository audit (133 reviewed source files) and the complete verify pipeline pass.
+
+Setup and upload were inspected at 1440/900/390/320 with no horizontal overflow. Production browser checks cover 26 locked clicks, 50 Enter/Space activations and 24 Alt shortcuts with zero hash events; four palette checks; all three completion paths and persistence; actual synthetic-PDF extraction/review/activation; configured users returning to Setup; four protected themes with motion/reduced motion; and four controlled offline routes. No application errors were observed. Browser accessibility-tree/description checks are targeted checks, not physical assistive-technology certification.
+
+All seven public screenshots pass renewed local OCR/metadata review and match their reviewed image hashes. The welcome image is refreshed; the other six are unchanged. Protected Prism, shared renderers, importer/domain/database and adapter files compare identically with the received commit. Final evidence and the full changed-file list are recorded in [beta release preparation](docs/BETA_RELEASE_PREPARATION.md). The new UI fix still needs pushing and redeployment; no tag/release is created.
+
+## Earlier final theme polish
 
 The current-state baseline was independently verified before editing: **118 tests in 13 files**, lint, strict TypeScript, production/PWA build, both dependency audits with zero vulnerabilities, source/build security scan, repository privacy scan and Pages artifact checks. The final suite contains **123 passing tests in 14 files**, retaining every baseline test and adding two atmosphere regressions plus three deployment-routing regressions. See [the final release review](docs/FINAL_RELEASE_REVIEW.md) for the full current evidence and boundaries.
 
@@ -8,7 +18,7 @@ Only Midnight, Campus and Focus were visually changed. All 13 curated themes wer
 
 Seven public screenshots are replaced with production captures from isolated empty or anonymous labelled-demo profiles, with blank display names. Full-resolution visual review, visible-text checks, local OCR and exact SHA-256 gates protect the public set. Names, student IDs, emails, account details, local Windows paths and private source/backup material are excluded.
 
-Read-only verification of the existing beta found a public legal-route 308→404 fault. The prepared canonical-root proxy fix passes **34 HTTP route/asset checks in the local Pages runtime**. Live-edge verification remains pending redeployment to the existing semester-os project. The optional semesteros.is-a.dev alias remains pending; no production claim is made for it.
+The earlier read-only verification found a public legal-route 308→404 fault. The canonical-root proxy fix passed **34 HTTP route/asset checks in the local Pages runtime** and has since been deployed: the current hosted beta also passes all 34 checks. The optional semesteros.is-a.dev alias remains pending; no production claim is made for it.
 
 ## Earlier October 1 local-beta evidence
 

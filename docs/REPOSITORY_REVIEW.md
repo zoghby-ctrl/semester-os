@@ -1,10 +1,10 @@
 # Public repository preparation and privacy review — October 2, 2026
 
-The final pass begins from the current application state. The supplied folder had no Git metadata. GitHub CLI is authenticated as the intended owner, zoghby-ctrl; the intended repository semester-os did not exist at inspection.
+The repository is now public at [zoghby-ctrl/semester-os](https://github.com/zoghby-ctrl/semester-os). Local main and origin/main matched the published eff1c2c baseline before this continuation. The working tree was clean, main's hosted CI passed, and GitHub CLI is authenticated as the intended owner. The earlier preparation started without Git metadata; that historical state no longer describes this repository.
 
 The owner explicitly authorized publication of the existing anonymized timetable metadata—course codes/names, rooms, weekdays, times—and labelled demo screenshots. This preserves legacy migration IDs and mappings. It does not authorize publishing original documents, imports, backups, private screenshots or student profiles.
 
-The owner separately chose to **leave the source license undecided and hold the public push**. No LICENSE is added, and no GitHub repository is created or pushed in this pass.
+**The source license remains undecided.** No LICENSE is added. Publication does not imply permission to reuse, modify or redistribute the source. This continuation prepares a local onboarding fix and beta release notes; it does not create a tag or release.
 
 ## Source boundary
 
@@ -18,12 +18,12 @@ Seven new documentation captures use a blank display name in an isolated empty o
 
 These controls apply to the reviewed public files, not every private file remaining on the owner's machine. Pattern scans are not a universal secret-detection or ownership guarantee.
 
-## Reviewed local Git preparation
+## Reviewed local changes
 
 ```sh
 npm run verify
 npm run repository:manifest
-git init --initial-branch=main
+git status --short --branch
 git add --pathspec-from-file=output/repository-paths.txt
 git diff --cached --stat
 git diff --cached --name-only
@@ -33,17 +33,18 @@ git diff --cached --check
 
 The ignored manifest lists exact paths, sizes and SHA-256 values. Stage only its reviewed entries. Use the owner's existing author name and the verified GitHub noreply address as a repository-local email so the initial public-beta commit does not expose the private configured email. Do not change global Git settings.
 
-The target remote is https://github.com/zoghby-ctrl/semester-os.git. Configuring this remote is local preparation and does not create or publish a GitHub repository.
+The existing origin is https://github.com/zoghby-ctrl/semester-os.git. Commit reviewed changes locally and push normally; do not reinitialize Git, create another repository or force-push.
 
-## Publication remains held
+## Push and first beta release
 
-After the owner chooses a license, apply its exact text and any required notices, add LICENSE deliberately to both source allowlists, rerun verification/staging review, and commit it. The following command is prepared for that later authorized step:
+The source repository already exists. After local validation and commit, the normal push command is:
 
 ```sh
-gh repo create zoghby-ctrl/semester-os --public --description "Local-first academic operating system that turns university timetables and study data into a personal semester workspace."
-git push -u origin main
+git push origin main
 ```
 
-The prepared local origin already points to this repository. Do not execute publication while the license/public-push decision is held. Enable private vulnerability reporting and inspect the first hosted CI result afterward.
+Inspect the new commit's hosted CI after pushing. Private vulnerability reporting is verified disabled and needs enabling before the first tagged beta. Topics and release-note recommendations are in [beta release preparation](BETA_RELEASE_PREPARATION.md). No release is created without explicit owner authorization.
+
+If the owner later selects a source license, apply its exact text/notices and deliberately add LICENSE to both source boundaries before verification and staging. Do not infer a license from dependency metadata, source availability or a beta tag.
 
 [Release readiness](RELEASE_READINESS.md) · [Deployment](DEPLOYMENT.md) · [Security policy](../SECURITY.md)

@@ -2,7 +2,7 @@
 
 Your timetable, courses, attendance, plans, notes, study time, and progress in one personal semester workspace. **Local-first. Accountless. Built for a semester you can make your own.**
 
-[Try the live beta](https://semester-os-4y6.pages.dev) · [Setup and development](#installation-and-development) · [Contributing](CONTRIBUTING.md) · [Security reporting](SECURITY.md)
+[Try the live beta](https://semester-os-4y6.pages.dev) · [Public repository](https://github.com/zoghby-ctrl/semester-os) · [Setup and development](#installation-and-development) · [Contributing](CONTRIBUTING.md) · [Security reporting](SECURITY.md)
 
 Semester OS is an independent project and is not affiliated with or endorsed by ECU or another university. The current release is a beta: review academic information against official sources and export backups of anything you need to keep.
 
@@ -34,6 +34,8 @@ Fresh installations start empty. You can explore the optional **Demo Semester**,
 3. Local PDF text extraction or English OCR produces an editable draft alongside a source preview.
 4. Check course names, weekdays, times, rooms, credits, prerequisites, and uncertain fields. Confirm each course and session.
 5. Generate your semester. Replacing an existing workspace creates a local recovery point first.
+
+Before first-run setup is complete, workspace navigation is visibly locked and explains how to unlock it. Upload and review a timetable, explore the labelled demo, or open an empty workspace. Navigation unlocks as soon as completion is saved; configured users can return to Setup without losing navigation access.
 
 Recognition depends on the document and can be wrong, especially with image quality, unfamiliar layouts, or time placement. Missing information remains unknown. Successful checks of particular documents do not establish an OCR accuracy rate. Always review the draft against your university's official timetable.
 
@@ -78,7 +80,7 @@ node serve.mjs
 Open [http://127.0.0.1:4173](http://127.0.0.1:4173). On Windows, **Start Semester OS.cmd** starts this server. Serve over HTTP; opening the built HTML file directly will not provide the application environment.
 
 ```sh
-npm test                 # complete suite: 123 tests in 14 files
+npm test                 # complete suite: 139 tests in 15 files
 npm run lint
 npm run typecheck        # strict TypeScript
 npm run build            # dist/ with PWA, Pages headers and routes
@@ -110,14 +112,14 @@ Navigation remains hash-based; public legal pages have explicit pathname routes.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md), use synthetic data or the authorized anonymous demo, and run the relevant checks plus `npm run verify`. Do not attach personal documents, backups, credentials, or private screenshots to commits or public issues.
 
-Report vulnerabilities privately using the channel described in [SECURITY.md](SECURITY.md). GitHub private vulnerability reporting must be enabled when the repository is published. Do not put exploits or student data in public issues.
+Report vulnerabilities privately using the channel described in [SECURITY.md](SECURITY.md). GitHub private vulnerability reporting is currently disabled and a monitored contact is not configured; enabling a private channel remains a release task. Do not put exploits or student data in public issues.
 
 ## Beta and license status
 
 The live beta is [semester-os-4y6.pages.dev](https://semester-os-4y6.pages.dev). The optional `semesteros.is-a.dev` alias remains pending its is-a.dev PR merge and Cloudflare custom-domain setup; it is not a production address.
 
-This polish pass passes 123 tests, lint, strict TypeScript, the production/PWA build, dependency audits, and security/privacy checks. Browser checks cover all curated themes at 1440, 900, 390, and 320 pixels. These checks do not establish production readiness, legal approval, penetration-test certification, or all-device OCR/PWA reliability. The current hosted legal-route fault is fixed in the prepared artifact and still requires redeployment and a fresh hosted check.
+The published baseline passes 123 tests; the local first-run navigation update adds 16 UI regressions for 139 tests across 15 files. Lint, strict TypeScript, production/PWA, dependency and security/privacy gates are recorded in validation. Hosted main CI has passed for the published baseline, and the live beta passes 34 HTTP route/asset checks, including both public legal routes. The new navigation update needs pushing and redeployment to reach users. Browser checks cover 1440, 900, 390, and 320 pixels. These checks do not establish production readiness, legal approval, penetration-test certification, or all-device OCR/PWA reliability.
 
-**No source license has been selected.** The owner deferred the decision and the public GitHub push. Apache-2.0 is a candidate, not an adopted license; it would permit third-party commercial use, modification, and redistribution, including proprietary derivatives. Do not assume reuse permission from the absence of a license. Third-party dependencies retain their own licenses.
+**No source license has been selected.** The repository is publicly available, but source availability does not imply permission to reuse, modify, or redistribute the code. No license or legal guarantee is inferred from publication. Third-party dependencies retain their own licenses.
 
-[Validation](VALIDATION.md) · [Final polish/release review](docs/FINAL_RELEASE_REVIEW.md) · [Release readiness](docs/RELEASE_READINESS.md) · [Cloudflare redeployment](docs/DEPLOYMENT.md)
+[Validation](VALIDATION.md) · [Onboarding and beta release preparation](docs/BETA_RELEASE_PREPARATION.md) · [Draft beta release notes](docs/releases/v0.1.0-beta.1.md) · [Release readiness](docs/RELEASE_READINESS.md) · [Cloudflare redeployment](docs/DEPLOYMENT.md)

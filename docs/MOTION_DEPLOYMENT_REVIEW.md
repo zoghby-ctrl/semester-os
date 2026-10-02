@@ -1,6 +1,6 @@
 # Motion milestone — source and deployment review
 
-> Historical October 1 record. The October 2 continuation verified the 118-test baseline, confirmed the live Cloudflare beta, obtained permission for anonymized demo metadata, refreshed screenshots without personal names/details, and prepared a local main commit. The owner left the license undecided and held the public push. See [FINAL_RELEASE_REVIEW.md](FINAL_RELEASE_REVIEW.md) and [the current repository review](REPOSITORY_REVIEW.md) for the current state.
+> Historical October 1 record. Subsequent work polished Midnight/Campus/Focus, refreshed screenshots without personal details, published the repository and deployed the legal-route fix. The source license remains undecided. See [BETA_RELEASE_PREPARATION.md](BETA_RELEASE_PREPARATION.md) and [the current repository review](REPOSITORY_REVIEW.md); deployment/Git omissions below describe the earlier milestone only.
 
 This document records the source/privacy and Cloudflare preparation portion of the October 1, 2026 continuation. Final motion implementation, cumulative test counts, desktop/mobile results, performance and cleanup evidence are recorded separately in [MOTION_MILESTONE.md](MOTION_MILESTONE.md) after the final root verification. No final test count is asserted here.
 

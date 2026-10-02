@@ -1,0 +1,22 @@
+name: Beta feedback
+description: Share non-sensitive feedback about an existing beta workflow.
+body:
+  - type: markdown
+    attributes:
+      value: This is public. Use synthetic examples; omit personal details, source documents, backups, credentials, and private screenshots. Read SECURITY.md for vulnerability reporting.
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Which workflow did you try?
+      description: Explain the task and what helped or caused confusion.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement
+      description: Keep examples anonymous. No source license or contribution terms are implied.
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and screen size

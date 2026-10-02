@@ -20,4 +20,4 @@ Security reports belong in a private channel described in [SECURITY.md](SECURITY
 
 ## License decision
 
-The owner has left the source-code license undecided and held the public push. Do not assume redistribution rights or add a license without that decision. Apache-2.0 is a reasonable candidate for permissive reuse and a patent grant, but it permits third-party commercial use, modification and redistribution, including proprietary derivatives. Confirm the owner's choice and preserve third-party notices before publication.
+The repository is public, but no source-code license has been selected. Source availability does not imply permission to reuse, modify or redistribute the code. Do not add a license or assume contribution/reuse terms without the owner's decision; discuss proposed contributions with the maintainer. Preserve third-party notices. Publication is not a legal guarantee.

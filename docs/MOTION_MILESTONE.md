@@ -1,8 +1,8 @@
 # Theme motion and Cloudflare beta preparation — October 1, 2026
 
-> Historical milestone. The October 2 final pass independently verified its 118-test baseline, polished Midnight/Campus/Focus and refreshed all public screenshots without names or personal information. The Cloudflare beta now exists; the owner authorized anonymized demo metadata but held the public GitHub push and left the license undecided. Current evidence and release gates are in [FINAL_RELEASE_REVIEW.md](FINAL_RELEASE_REVIEW.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md); historical pending-deployment/sharing statements below describe the October 1 state.
+> Historical October 1 milestone. The later theme polish preserved Prism and refreshed all public screenshots without personal information. The Cloudflare beta and public GitHub repository now exist; hosted routes/assets and main CI pass. The source license remains undecided. Current evidence is in [BETA_RELEASE_PREPARATION.md](BETA_RELEASE_PREPARATION.md) and [RELEASE_READINESS.md](RELEASE_READINESS.md). Pending deployment/Git statements below describe the earlier October 1 state only.
 
-The motion milestone is implemented in the existing local-first Semester OS. All 13 curated themes have ambient movement and distinct interactions; Custom offers 13 environments. Protected Prism shaders and meteor modules remain unchanged. Cloudflare Pages is prepared; authorization and a real HTTPS deployment remain pending.
+At the October 1 milestone, all 13 curated themes had ambient movement and distinct interactions; Custom offered 13 environments. Protected Prism shaders and meteor modules remained unchanged. Cloudflare preparation preceded the later verified HTTPS deployment.
 
 ## 1. Independently verified baseline
 

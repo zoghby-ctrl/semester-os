@@ -11,7 +11,7 @@ export const reviewedScreenshots = {
   "schedule-desktop.png": "e3a687e6f660e31bc5cef801d811f81a100db003112f5ff67cbd655c1d15c659",
   "today-desktop.png": "d94267e2a5f5801455abded408784580e9e08e49f40d2c85436d8e77c02fdc71",
   "today-mobile.png": "65109a6fcede8ec2fb4a190d8adefbf286242b27a4114acd1c61e0e01447f0f1",
-  "welcome-desktop.png": "d6668ae31696e5359b6a7ddb1f1a12165cc9e56c894af77676760480ddba0f34",
+  "welcome-desktop.png": "65692076acf0a9ae5fca03e442ea6ed3288e9f537d5120902f317272292121bb",
 };
 export const isRepositoryFile = (file) => rootFiles.has(file)
   || /^src\/(?:[\w.-]+\/)*[\w.-]+\.(?:tsx?|css)$/.test(file)

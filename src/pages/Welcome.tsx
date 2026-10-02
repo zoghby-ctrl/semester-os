@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight, BookOpen, Check, FileText, LoaderCircle, Plus, ShieldCheck, Trash2, Upload } from "lucide-react";
-import { useApp } from "../lib/context";
+import { ArrowLeft, ArrowRight, BookOpen, Check, FileText, LoaderCircle, LockKeyhole, Plus, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { setupNavigationHint, useApp } from "../lib/context";
 import { activateSemester, updateSettings } from "../lib/db";
 import { legacySemester } from "../lib/legacy";
 import { dateSchema, semesterConflicts } from "../lib/domain";
@@ -69,6 +69,7 @@ export function Welcome() {
     <div className="welcome-actions"><button className="button" onClick={()=>setStep("upload")}><Upload size={17}/> Upload your timetable</button>
       {!settings.semester&&<button className="button secondary" disabled={busy} onClick={async()=>{setBusy(true);if(await act(activateSemester(legacySemester("Demo Student",true),null))) setOpenRequested(true);setBusy(false);}}><BookOpen size={17}/> Explore Demo Semester</button>}
       <button className="text-link" onClick={async()=>{if(await act(updateSettings({onboardingComplete:true}))) setOpenRequested(true);}}>{settings.semester?"Return to your semester":"Open an empty workspace"} <ArrowRight size={14}/></button></div>
+    {!settings.onboardingComplete && <p className="setup-unlock-note"><LockKeyhole size={13} aria-hidden="true" />{setupNavigationHint}</p>}
     <p className="privacy-line"><ShieldCheck size={15}/> Local-first. No account required. Your semester data is designed to stay on this device during normal local use.</p>
     <p className="setup-legal">By continuing, you acknowledge the Terms of Use and Privacy Policy. <LegalLinks /></p>
   </div>;

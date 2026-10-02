@@ -341,6 +341,31 @@ kbd {
   background: var(--accent);
   border-radius: 50%;
 }
+.sidebar button[aria-disabled="true"],
+.bottom-nav button[aria-disabled="true"] {
+  opacity: .58;
+  cursor: not-allowed;
+}
+.sidebar button[aria-disabled="true"]:hover,
+.bottom-nav button[aria-disabled="true"]:hover {
+  color: var(--muted);
+  background: transparent;
+  transform: none;
+  box-shadow: none;
+}
+.navigation-lock { margin-left: auto; flex-shrink: 0; }
+.navigation-lock-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 13px 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.65;
+}
+.navigation-lock-note svg { flex-shrink: 0; margin-top: 2px; }
+.bottom-nav button[aria-disabled="true"] { position: relative; }
+.bottom-nav .navigation-lock { position: absolute; top: 7px; left: calc(50% + 7px); margin: 0; width: 9px; height: 9px; }
 .sidebar-course-label {
   display: flex;
   justify-content: space-between;
@@ -2756,6 +2781,8 @@ main {
   color: var(--muted);
   font-size: 9px;
 }
+.command-menu [cmdk-item][data-disabled="true"] { opacity: .55; cursor: not-allowed; }
+.command-setup-note { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; line-height: 1.6; margin: 0 0 14px; }
 .command-course-dot {
   width: 6px;
   height: 6px;
@@ -3809,6 +3836,9 @@ html[data-ambient-paused="true"] .prism-art {
 .welcome-accent { color: var(--accent); }
 .welcome-space .day-hero { margin: 32px 0; }
 .welcome-actions { display:flex; gap:12px; flex-wrap:wrap; }
+.welcome-actions > .text-link { align-self: center; min-height: 44px; padding: 8px 4px; }
+.welcome-space > .setup-unlock-note { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 11px; line-height: 1.6; }
+.setup-unlock-note svg { flex-shrink: 0; }
 .privacy-line { display:flex; align-items:center; gap:9px; margin-top:24px; font-size:11px !important; }
 .demo-banner { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; border:1px solid var(--border-bright); background:var(--selected); border-radius:8px; padding:12px 16px; margin-bottom:24px; font-size:10px; color:var(--accent); }
 .timetable-head, .timetable-body { grid-template-columns: 82px repeat(var(--day-columns, 3), minmax(0,1fr)); }

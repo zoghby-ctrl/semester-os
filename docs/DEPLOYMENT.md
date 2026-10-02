@@ -17,7 +17,7 @@ npm run verify:hosted -- https://semester-os-4y6.pages.dev
 
 This is the exact redeployment command for the existing project. Wrangler Direct Upload supports --project-name and --branch; see [Cloudflare's deployment instructions](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/). If authentication expires, run npx --yes wrangler@4.146.0 login and sign into the intended existing account. Do not paste credentials into source or chat.
 
-Direct Upload does not require a public GitHub repository, so the owner's hold on source publication does not require changing the existing Pages project. Do not convert project modes or create a replacement deployment target for this polish.
+The source repository is now public at [zoghby-ctrl/semester-os](https://github.com/zoghby-ctrl/semester-os). Direct Upload remains the deployment method for the existing Pages project. Source availability does not change the undecided license. Do not convert project modes or create a replacement deployment target for this polish.
 
 | Build setting | Value |
 | --- | --- |
@@ -32,7 +32,7 @@ Direct Upload does not require a public GitHub repository, so the owner's hold o
 
 Read-only inspection on October 2 found that the deployed /privacy and /terms requests returned 308 redirects to trailing-slash paths that returned 404. Other tested route, header, metadata and extraction-integrity checks passed.
 
-The prepared _redirects now proxies both legal URL forms to the canonical root, rather than index.html, avoiding Pages' HTML-path normalization. The fix passed 34 routes/assets in Wrangler's local Pages runtime, including legal forms, hash aliases and missing-asset 404s. It remains unverified on the live edge until redeployment.
+The deployed _redirects now proxies both legal URL forms to the canonical root, rather than index.html, avoiding Pages' HTML-path normalization. The current hosted build passes all 34 HTTP route/asset checks, including both legal URL forms, aliases, missing-asset 404s, headers and extraction-asset integrity. The earlier legal-route fault is resolved on the live edge. The new onboarding UX changes still need their own redeployment after the local commit is pushed.
 
 The app's hash router, service-worker architecture and academic storage are unchanged. A top-level 404.html still prevents missing JavaScript, PDF workers and OCR/WASM assets from becoming application HTML. No broad SPA rewrite is added. See [Pages routing behavior](https://developers.cloudflare.com/pages/configuration/serving-pages/) and [relative proxy rules](https://developers.cloudflare.com/pages/configuration/redirects/).
 

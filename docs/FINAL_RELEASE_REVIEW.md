@@ -1,6 +1,6 @@
 # Final pre-public-push review — October 2, 2026
 
-The existing Semester OS was polished in place. No importer, database, migration, backup, router or theme system was rebuilt. The owner's decisions are explicit: anonymized demo timetable metadata may be shared; the source license remains undecided and the public push is held.
+The existing Semester OS was polished in place. No importer, database, migration, backup, router or theme system was rebuilt. Anonymized demo timetable metadata may be shared and the source license remains undecided. This records the theme-polish pass; the repository was subsequently published and the legal-route fix deployed. See [the current onboarding/release preparation review](BETA_RELEASE_PREPARATION.md).
 
 ## Visual audit and changes
 
@@ -80,13 +80,13 @@ Production browser checks are recorded with the final local evidence. Static pix
 
 Local main is prepared with a reviewed initial public-beta commit and a GitHub noreply commit email, retaining the owner's configured author name. The source allowlist defines the exact staging set. The intended origin is https://github.com/zoghby-ctrl/semester-os.git.
 
-GitHub CLI authentication for zoghby-ctrl is available. The target repository did not exist at inspection; no repository is created and nothing is pushed while the owner's hold applies. Hosted CI and GitHub private vulnerability reporting remain pending publication.
+The initial commit is now public at [zoghby-ctrl/semester-os](https://github.com/zoghby-ctrl/semester-os). Hosted CI has passed for main. Private vulnerability reporting remains disabled and needs enabling before the first tagged beta. The first-run navigation fix is a later local continuation, with its own validation and push/deployment status.
 
 Apache-2.0 is a reasonable permissive option with a patent grant. It **permits third-party commercial use, modification and redistribution, including proprietary derivatives**. The owner chose to defer the license decision after that warning. No root LICENSE or project license declaration is added. [Official Apache license](https://www.apache.org/licenses/LICENSE-2.0).
 
 ## Cloudflare and remaining blockers
 
-The existing [live beta](https://semester-os-4y6.pages.dev) is retained. Its read-only hosted check found /privacy and /terms returning 308 then 404 at their trailing-slash destinations. The artifact now proxies both legal forms to the canonical root and passes the local Pages runtime, without changing hash routing or broadening missing-asset fallback. Live-edge repair still requires redeployment and another hosted check.
+The existing [live beta](https://semester-os-4y6.pages.dev) is retained. An earlier hosted check found /privacy and /terms returning 308 then 404 at their trailing-slash destinations. The deployed artifact now proxies both legal forms to the canonical root. A later hosted check passes all 34 routes/assets, without changing hash routing or broadening missing-asset fallback. The live legal-route fault is resolved.
 
 After the final verified build, redeploy to the existing project:
 
@@ -95,4 +95,4 @@ npx --yes wrangler@4.146.0 pages deploy dist --project-name=semester-os --branch
 npm run verify:hosted -- https://semester-os-4y6.pages.dev
 ```
 
-Remaining blockers: owner license/public-push decision; redeployment and hosted legal/update checks; monitored operator/contact and qualified draft-policy review; GitHub private reporting/hosted CI after publication; physical-device and unassisted-student testing. The optional semesteros.is-a.dev alias remains pending its is-a.dev PR merge and Cloudflare custom-domain setup. It is not a production endpoint.
+Remaining beta release tasks: source-license decision; a monitored operator/contact and qualified draft-policy review; GitHub private reporting; physical-device and unassisted-student testing; and publishing/deploying the later onboarding fix. The optional semesteros.is-a.dev alias remains pending its is-a.dev PR merge and Cloudflare custom-domain setup. It is not a production endpoint.
