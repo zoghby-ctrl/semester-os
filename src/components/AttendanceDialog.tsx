@@ -16,6 +16,7 @@ import {
 } from "../lib/scheduling";
 import type { Attendance } from "../lib/schema";
 import { CourseTag, Modal, Status } from "./ui";
+import { AttendanceInstructions } from "./WorkflowGuide";
 export function AttendanceDialog({
   session,
   date,
@@ -131,6 +132,8 @@ export function AttendanceDialog({
         </button>
       </div>
       <form onSubmit={save} className="form-stack">
+        <p className="fine-print">Enter when you actually arrived, then save. For a past date, the suggested time is the scheduled start; change it to your actual arrival.</p>
+        <details className="workflow-guide"><summary>How check-ins and percentages work</summary><AttendanceInstructions /></details>
         <label>
           Date
           <input type="date" required value={recordDate} readOnly />

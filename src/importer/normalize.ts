@@ -2,6 +2,7 @@ import { courseColors, normalizedSemesterSchema, timeSchema, type NormalizedSeme
 import { getUniversityAdapter } from "../universities";
 import type { AcademicContext, ImporterResult } from "./types";
 import { validateImporterResult } from "./validation";
+import { resolveECUCode } from "../universities/ecu-codes";
 
 export function reviewIssues(result:ImporterResult) {
   const issues:string[]=[];
@@ -10,6 +11,10 @@ export function reviewIssues(result:ImporterResult) {
   const codes=result.courses.map(c=>c.code.value?.trim().toUpperCase());
   if(codes.some(c=>!c)) issues.push("Every course needs a code.");
   if(new Set(codes).size!==codes.length) issues.push("Course codes must be unique.");
+  if (result.adapterId==="ecu") for (const c of result.courses) {
+    const match=resolveECUCode(c.code.value??"");
+    if (match.status==="ambiguous" || match.status==="invalid" && match.corrected) issues.push(`Course ${c.code.value}: correct the uncertain ECU code against the source before confirming.`);
+  }
   for(const c of result.courses) if(!c.reviewed) issues.push(`Course ${c.code.value || "without a code"}: review and confirm its details, including fields not supplied.`);
   for(const [i,s] of result.sessions.entries()) {
     const prefix=`Session ${i+1}: `;
@@ -34,7 +39,9 @@ export function normalizeImport(result:ImporterResult,context:AcademicContext):N
     program:context.program.trim()?{id:"program",name:context.program.trim(),specialization:context.specialization.trim()||null}:null,
     level:context.level.trim()?{id:"level",label:context.level.trim()}:null,
     semester:{id:semesterId,name:context.semesterName.trim()||"My semester",start:context.start,end:context.end},
-    courses:result.courses.map((c,i)=>({id:c.id,code:c.code.value!.trim(),name:c.name.value?.trim()||null,shortName:null,credits:c.credits.value,prerequisite:c.prerequisite.value,prerequisiteKnown:c.prerequisite.confidence.level!=="unknown",hours:c.hours.value,color:courseColors[i%courseColors.length]})),
+    courses:result.courses.map((c,i)=>({id:c.id,code:c.code.value!.trim(),name:c.name.value?.trim()||null,shortName:null,credits:c.credits.value,prerequisite:c.prerequisite.value,prerequisiteKnown:c.prerequisite.confidence.level!=="unknown",hours:c.hours.value,color:courseColors[i%courseColors.length],
+      ...([c.name,c.credits,c.prerequisite,c.hours].some(f=>f.confidence.method==="catalog") ? {metadataProvenance:{code:c.code.confidence,name:c.name.confidence,credits:c.credits.confidence,prerequisite:c.prerequisite.confidence,hours:c.hours.confidence}} : {}),
+    })),
     offerings:result.courses.map(c=>({id:`offering-${c.id}`,courseId:c.id,semesterId,section:null})),
     sessions:result.sessions.map(s=>({id:s.id,courseId:s.courseId,offeringId:`offering-${s.courseId}`,day:s.day.value!,type:s.type.value!,start:s.start.value!,end:s.end.value!,room:s.room.value?.trim()||"",roomId:rooms.find(r=>r.label===s.room.value?.trim())?.id??null,timeConfirmed:true})),
     rooms,confirmedAt:new Date().toISOString()});

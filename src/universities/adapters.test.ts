@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ECUAdapter, GenericAdapter, getUniversityAdapter, matchCourseCodes } from "./index";
 describe("University boundaries", () => {
-  it("recognizes ECU conventions without a hardcoded course catalog", () => {
+  it("recognizes ECU conventions while keeping unknown structurally valid codes usable", () => {
     expect(matchCourseCodes(ECUAdapter,"CSC2105 INF 2101 BSC1301 CSC9999")).toEqual(["CSC2105","INF2101","BSC1301","CSC9999"]);
     expect(matchCourseCodes(ECUAdapter,"CSC210S")).toEqual([]);
   });

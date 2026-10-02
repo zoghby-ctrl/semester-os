@@ -32,6 +32,7 @@ import {
   roomLabel,
 } from "../lib/scheduling";
 import { AttendanceDialog } from "../components/AttendanceDialog";
+import { WorkflowGuide } from "../components/WorkflowGuide";
 import { StudyTimer } from "../components/StudyTimer";
 import {
   CourseTag,
@@ -167,6 +168,7 @@ export function Today() {
           Weekly schedule
         </button>
       </div>
+      <WorkflowGuide compact />
       <div className="dashboard-grid">
         <div className="dashboard-main">
           <section className="day-hero">

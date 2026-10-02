@@ -11,7 +11,7 @@ Use Node 24 and the committed lockfile. Build and validate before uploading **on
 ```sh
 npm ci
 npm run verify
-npx --yes wrangler@4.146.0 pages deploy dist --project-name=semester-os --branch=main
+npx --yes wrangler@4.146.0 pages deploy dist --project-name=semester-os --branch=semester-os-ecu
 npm run verify:hosted -- https://semester-os-4y6.pages.dev
 ```
 
@@ -24,15 +24,17 @@ The source repository is now public at [zoghby-ctrl/semester-os](https://github.
 | Node | 24, matching .node-version and CI |
 | Build | npm run build; use npm run verify for release gates |
 | Output | dist |
-| Production branch | main |
+| Production branch | semester-os-ecu (Pages configuration; Git source remains main) |
 | Optional browser configuration | VITE_PROJECT_CONTACT: public monitored project address |
 | Functions, backend, student database, analytics | None |
 
 ## Legal-route correction
 
+Read-only inspection on October 2 confirmed that production deployment 562bf36e uses source commit 6731fcd and branch **semester-os-ecu**. Deployments with --branch=main are previews and do not replace the normal beta URL. Git development remains on main. Use the configured Pages production branch in the command above; do not create a new Git branch for this upload. The onboarding lock is already live; the import and guidance changes described in BETA_IMPORT_GUIDANCE.md still need publication.
+
 Read-only inspection on October 2 found that the deployed /privacy and /terms requests returned 308 redirects to trailing-slash paths that returned 404. Other tested route, header, metadata and extraction-integrity checks passed.
 
-The deployed _redirects now proxies both legal URL forms to the canonical root, rather than index.html, avoiding Pages' HTML-path normalization. The current hosted build passes all 34 HTTP route/asset checks, including both legal URL forms, aliases, missing-asset 404s, headers and extraction-asset integrity. The earlier legal-route fault is resolved on the live edge. The new onboarding UX changes still need their own redeployment after the local commit is pushed.
+The deployed _redirects now proxies both legal URL forms to the canonical root, rather than index.html, avoiding Pages' HTML-path normalization. The current hosted build passes all 34 HTTP route/asset checks, including both legal URL forms, aliases, missing-asset 404s, headers and extraction-asset integrity. The earlier legal-route fault is resolved on the live edge. The onboarding UX fix is deployed in production at 6731fcd. The locally verified import and workflow-guidance changes need a new production upload.
 
 The app's hash router, service-worker architecture and academic storage are unchanged. A top-level 404.html still prevents missing JavaScript, PDF workers and OCR/WASM assets from becoming application HTML. No broad SPA rewrite is added. See [Pages routing behavior](https://developers.cloudflare.com/pages/configuration/serving-pages/) and [relative proxy rules](https://developers.cloudflare.com/pages/configuration/redirects/).
 

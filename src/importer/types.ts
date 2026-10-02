@@ -40,6 +40,10 @@ export interface AcademicContext {
   start:string | null; end:string | null;
 }
 export interface DocumentExtractor {
-  extract(file: File, options: { signal: AbortSignal; progress: (message:string)=>void }): Promise<ExtractionPage[]>;
+  extract(file: File, options: {
+    signal: AbortSignal; progress: (message:string)=>void;
+    pages?: number[];
+    materialPlan?: { adapterId: string; courseCodes: string[] };
+  }): Promise<ExtractionPage[]>;
 }
 export type ConfirmedSemester = NormalizedSemester;

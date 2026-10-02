@@ -9,7 +9,7 @@ import type { AcademicContext, ExtractionPage, ExtractionWord } from "./types";
 const word = (text:string,x:number,y:number,score:number|null=null):ExtractionWord => ({text,x,y,width:text.length*7,height:12,score});
 const page = (words:ExtractionWord[],method:ExtractionPage["method"]="pdf-text"):ExtractionPage => ({page:1,source:"timetable.pdf",method,width:1000,height:700,text:words.map(w=>w.text).join(" "),words,blocks:[]});
 const context:AcademicContext={name:"Student",adapterId:"ecu",program:"",level:"",semesterName:"Autumn",specialization:"",start:null,end:null};
-const rows=()=>page([word("Saturday",10,10),word("CSC2105",120,10),word("Lecture",230,10),word("08:00–09:30",340,10),word("A403",500,10),word("Saturday",10,40),word("CSC2105",120,40),word("Lab",230,40),word("10:00–11:00",340,40)]);
+const rows=(code="CSC2105")=>page([word("Saturday",10,10),word(code,120,10),word("Lecture",230,10),word("08:00–09:30",340,10),word("A403",500,10),word("Saturday",10,40),word(code,120,40),word("Lab",230,40),word("10:00–11:00",340,40)]);
 
 describe("Local document import",()=>{
   it("validates empty, oversized, unsupported, and mismatched file types",()=>{
@@ -35,14 +35,14 @@ describe("Local document import",()=>{
     expect(s.day.value).toBe(0); expect(s.start.value).toBe("08:00"); expect(s.end.value).toBe("09:00"); expect(s.start.confidence.method).toBe("layout"); expect(s.type.value).toBeNull();
   });
   it("enriches matching plan rows by column and excludes prerequisites as enrollments",()=>{
-    const result=parseTimetable([rows()],ECUAdapter);
+    const result=parseTimetable([rows()],GenericAdapter);
     const plan=page([word("Course Name",140,10),word("Credits",550,10),word("Prerequisite",720,10),word("CSC2105",10,50),word("Artificial Intelligence",140,50),word("3",570,50),word("CSC1100",720,50),word("CSC2200",10,90),word("Different course",140,90),word("4",570,90)]);
-    const out=enrichMaterialPlan(result,[plan],ECUAdapter);
+    const out=enrichMaterialPlan(result,[plan],GenericAdapter);
     expect(out.courses).toHaveLength(1); expect(out.courses[0].name.value).toBe("Artificial Intelligence"); expect(out.courses[0].credits.value).toBe(3); expect(out.courses[0].prerequisite.value?.code).toBe("CSC1100");
     expect(result.courses[0].name.value).toBeNull();
   });
   it("does not assign unlabeled trailing numbers as credits",()=>{
-    const result=enrichMaterialPlan(parseTimetable([rows()],ECUAdapter),[page([word("CSC2105",10,40),word("Artificial Intelligence",140,40),word("82",720,40)])],ECUAdapter);
+    const result=enrichMaterialPlan(parseTimetable([rows("QA1001")],ECUAdapter),[page([word("QA1001",10,40),word("Artificial Intelligence",140,40),word("82",720,40)])],ECUAdapter);
     expect(result.courses[0].credits.value).toBeNull();
   });
   it("splits adjacent same-color blocks at their separate course anchors",()=>{
@@ -52,10 +52,33 @@ describe("Local document import",()=>{
     expect(sessions.map(s=>[s.start.value,s.end.value,s.room.value])).toEqual([["08:00","10:00","A403"],["10:00","12:00","A401"]]);
   });
   it("reads the ECU ruled-plan format from detected columns without default credits",()=>{
-    const p=page([word("CSC2105",10,110),word("Artificial Intelligence",110,110),word("2",910,110),word("-",710,110),word("2",810,110),word("3",1010,110),word("N/A",1110,110)],"ocr");
+    const p=page([word("QA1001",10,110),word("Artificial Intelligence",110,110),word("2",910,110),word("-",710,110),word("2",810,110),word("3",1010,110),word("N/A",1110,110)],"ocr");
     p.width=1300;p.table={columns:Array.from({length:13},(_,i)=>i*100),rows:[0,100,180]};
-    const c=enrichMaterialPlan(parseTimetable([rows()],ECUAdapter),[p],ECUAdapter).courses[0];
+    const c=enrichMaterialPlan(parseTimetable([rows("QA1001")],ECUAdapter),[p],ECUAdapter).courses[0];
     expect(c.credits.value).toBe(3);expect(c.credits.confidence.level).toBe("low");expect(c.hours.value).toEqual({lecture:2,lab:0,tutorial:2});expect(c.prerequisite.confidence.level).toBe("low");
+  });
+  it("keeps multiline plan names in their own cell and preserves OCR provenance",()=>{
+    const p=page([word("QA1001",10,110,90),word("Artificial",110,112,80),word("Intelligence",110,135,75),word("3",1010,110,85),word("CSC1100",1110,110,90),word("Prerequisite name",1110,135,80)],"ocr");
+    p.width=1400;p.page=101;p.table={columns:Array.from({length:13},(_,i)=>i*100),rows:[0,100,180,250]};
+    const result=enrichMaterialPlan(parseTimetable([rows("QA1001")],ECUAdapter),[p],ECUAdapter),c=result.courses[0];
+    expect(c.name.value).toBe("Artificial Intelligence");expect(c.name.confidence.method).toBe("ocr");expect(c.name.confidence.page).toBe(101);expect(c.name.confidence.recognitionScore).toBe(75);expect(c.reviewed).toBe(false);
+    expect(result.courses).toHaveLength(1);
+  });
+  it("does not let footer prose masquerade as plan headers and erase course names",()=>{
+    const p=page([word("Course Name",140,10),word("Credits",550,10),word("QA1001",10,50),word("Artificial Intelligence",140,50),word("3",570,50),word("Lab",140,180),word("Tutorial",230,180)]);
+    const c=enrichMaterialPlan(parseTimetable([rows("QA1001")],ECUAdapter),[p],ECUAdapter).courses[0];
+    expect(c.name.value).toBe("Artificial Intelligence");expect(c.credits.value).toBe(3);expect(c.hours.value).toBeNull();
+  });
+  it("does not replace a selectable course name with a later poor OCR duplicate",()=>{
+    const plan=page([word("CSC2105",10,50),word("Artificial Intelligence",140,50)]),scan={...plan,method:"ocr" as const,words:[word("CSC2105",10,50,50),word("Artificiai lnteligence",140,50,40)]};
+    const result=enrichMaterialPlan(parseTimetable([rows()],GenericAdapter),[plan,scan],GenericAdapter);
+    expect(result.courses[0].name.value).toBe("Artificial Intelligence");
+    expect(result.courses[0].name.confidence.method).toBe("pdf-text");
+    expect(result.warnings.join(" ")).not.toContain("Course names were not supplied");
+  });
+  it("explains unmatched plan pages without creating unrelated enrolled courses",()=>{
+    const result=enrichMaterialPlan(parseTimetable([rows("QA1001")],ECUAdapter),[page([word("CSC2200",10,50),word("Other course",140,50)])],ECUAdapter);
+    expect(result.courses).toHaveLength(1);expect(result.courses[0].name.value).toBeNull();expect(result.warnings.join(" ")).toContain("No material-plan rows matched");
   });
   it("requires session review, accepts explicit corrections and preserves unknown fields",()=>{
     const result=parseTimetable([rows()],ECUAdapter);

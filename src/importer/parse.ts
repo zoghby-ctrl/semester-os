@@ -4,6 +4,8 @@ import { field, confirmedField } from "./confidence";
 import type { CandidateCourse, CandidateSession, ExtractedField, ExtractionPage, ExtractionWord, ImporterResult } from "./types";
 import { validateExtractionPages, validateImporterResult } from "./validation";
 import { universityProfileSchema } from "../lib/domain";
+import { ecuCodeTokens, resolveECUCode, type ECUAcademicContext, type ECUCodeResolution } from "../universities/ecu-codes";
+import { enrichECUCourse, recordECUNameEvidence } from "./ecu-enrichment";
 
 const centerX=(w:ExtractionWord)=>w.x+w.width/2;
 const centerY=(w:ExtractionWord)=>w.y+w.height/2;
@@ -31,11 +33,21 @@ const rangesFor=(text:string)=>{
   const match=text.match(/(\d{1,2}[:.]\d{2}\s*(?:AM|PM)?)\s*(?:[-–—]|to)\s*(\d{1,2}[:.]\d{2}\s*(?:AM|PM)?)/i);
   return match ? [readTime(match[1]),readTime(match[2])] : [null,null];
 };
-function anchorsFor(page: ExtractionPage, adapter:UniversityAdapter) {
-  const found:{code:string;word:ExtractionWord}[]=[];
+function anchorsFor(page: ExtractionPage, adapter:UniversityAdapter, context:ECUAcademicContext = {}) {
+  const found:{code:string;word:ExtractionWord;resolution?:ECUCodeResolution}[]=[];
   for(const line of linesFor(page))
     for(let i=0;i<line.words.length;i++) {
       const word=line.words[i],next=line.words[i+1];
+      if (adapter.id==="ecu") {
+        let resolution=resolveECUCode(word.text,context);
+        const tokens=ecuCodeTokens(word.text);
+        if (resolution.status==="invalid" && !resolution.corrected && tokens.length===1) resolution=resolveECUCode(tokens[0],context);
+        if (tokens.length>1) resolution={raw:word.text,code:null,entry:null,status:"ambiguous",candidates:tokens.flatMap(t=>resolveECUCode(t,context).candidates),corrected:false};
+        if (resolution.status==="invalid" && !resolution.corrected && next && next.x-word.x-word.width<word.height*3) resolution=resolveECUCode(word.text+next.text,context);
+        const code=resolution.code??(resolution.status==="ambiguous" || resolution.corrected ? resolution.raw.trim().toUpperCase() : null);
+        if (code && code.length<=40 && !found.some(a=>a.code===code&&Math.abs(a.word.x-word.x)<word.height&&Math.abs(a.word.y-word.y)<word.height)) found.push({code,word,resolution});
+        continue;
+      }
       let codes=matchCourseCodes(adapter,word.text);
       if(!codes.length && next && next.x-word.x-word.width<word.height*3) codes=matchCourseCodes(adapter,word.text+next.text);
       for(const code of codes) if(!found.some(a=>a.code===code&&Math.abs(a.word.x-word.x)<word.height&&Math.abs(a.word.y-word.y)<word.height)) found.push({code,word});
@@ -46,12 +58,12 @@ function emptyCourse(code:string,page?:ExtractionPage,word?:ExtractionWord):Cand
   return {id:code.replace(/[^a-zA-Z0-9._:-]/g,"-") || crypto.randomUUID(),code:field(code,page,word?[word]:[]),name:field<string>(null,page),credits:field<number>(null,page),prerequisite:field<{code:string;name:string}|null>(null,page),hours:field<{lecture:number;lab:number;tutorial:number}>(null,page),reviewed:false};
 }
 export function emptyImport(adapterId:string):ImporterResult {return {schemaVersion:1,adapterId,courses:[],sessions:[],warnings:[],sources:[]};}
-export function parseTimetable(pages:ExtractionPage[],adapter:UniversityAdapter):ImporterResult {
+export function parseTimetable(pages:ExtractionPage[],adapter:UniversityAdapter,context:ECUAcademicContext = {}):ImporterResult {
   pages = validateExtractionPages(pages);
   universityProfileSchema.parse(adapter.profile);
   const result=emptyImport(adapter.id);
   for(const page of pages) {
-    const lines=linesFor(page),anchors=anchorsFor(page,adapter);
+    const lines=linesFor(page),anchors=anchorsFor(page,adapter,context);
     const headers=page.words.map(w=>({day:adapter.weekday(w.text),word:w})).filter((h):h is {day:number;word:ExtractionWord}=>h.day!==null && h.word.y<page.height*.35);
     const grid=headers.length>=2 && new Set(headers.map(h=>h.day)).size>=2;
     let previousDay:number|null=null;
@@ -71,8 +83,16 @@ export function parseTimetable(pages:ExtractionPage[],adapter:UniversityAdapter)
       const minute=Math.round((lower.minute+(y-lower.y)*(upper.minute-lower.minute)/(upper.y-lower.y))/30)*30;
       return minute>=0&&minute<1440?`${String(Math.floor(minute/60)).padStart(2,"0")}:${String(minute%60).padStart(2,"0")}`:null;
     };
-    for(const {code,word} of anchors) {
-      if(!result.courses.some(c=>c.code.value===code)) result.courses.push(emptyCourse(code,page,word));
+    for(const {code,word,resolution} of anchors) {
+      if(!result.courses.some(c=>c.code.value===code)) {
+        const course=emptyCourse(code,page,word);
+        if (resolution?.corrected || resolution?.status==="ambiguous") {
+          course.code.confidence.level="low";
+          course.code.confidence.reason=`ECU code evidence “${resolution.raw.slice(0,40)}”${resolution.code?" normalized to "+resolution.code:" is uncertain"}. ${resolution.candidates.length?"Catalog candidates: "+resolution.candidates.join(", ")+". ":""}Verify the source code before confirming.`.slice(0,500);
+          result.warnings.push(course.code.confidence.reason);
+        }
+        result.courses.push(course);
+      }
       let local:ExtractionWord[],day:number|null,start:string|null,end:string|null,layoutTimes=false;
       if(grid) {
         const header=[...headers].sort((a,b)=>Math.abs(centerX(a.word)-centerX(word))-Math.abs(centerX(b.word)-centerX(word)))[0];
@@ -125,12 +145,14 @@ export function parseTimetable(pages:ExtractionPage[],adapter:UniversityAdapter)
 
 // Enrich only rows whose actual code matches a detected timetable course.
 // Column geometry prevents prerequisites from becoming extra enrolled courses.
-export function enrichMaterialPlan(result:ImporterResult,pages:ExtractionPage[],adapter:UniversityAdapter):ImporterResult {
+export function enrichMaterialPlan(result:ImporterResult,pages:ExtractionPage[],adapter:UniversityAdapter,context:ECUAcademicContext = {}):ImporterResult {
   pages = validateExtractionPages(pages);
   result = validateImporterResult(result);
   const out=structuredClone(result);
+  if (adapter.id==="ecu") out.courses=out.courses.map(c=>enrichECUCourse(c,context));
+  let matchedRows = 0;
   for(const page of pages) {
-    const lines=linesFor(page),anchors=anchorsFor(page,adapter);
+    const lines=linesFor(page),anchors=anchorsFor(page,adapter,context);
     const creditsHeader=page.words.find(w=>adapter.materialPlanHeaders.credits.test(w.text));
     const prerequisiteHeader=page.words.find(w=>adapter.materialPlanHeaders.prerequisite.test(w.text));
     const lectureHeader=page.words.find(w=>/^lectures?$/i.test(w.text));
@@ -138,42 +160,64 @@ export function enrichMaterialPlan(result:ImporterResult,pages:ExtractionPage[],
     const tutorialHeader=page.words.find(w=>/^tutorials?$/i.test(w.text));
     const firstCodeX=anchors.length?Math.min(...anchors.map(a=>a.word.x)):0;
     const courseAnchors=anchors.filter(a=>Math.abs(a.word.x-firstCodeX)<page.width*.08);
-    for(const {code,word} of courseAnchors) {
+    for(const {code,word,resolution} of courseAnchors) {
+      if (resolution?.status==="ambiguous" || resolution?.status==="invalid") {
+        out.warnings.push(`Uncertain ECU material-plan code “${resolution.raw.slice(0,40)}” on page ${page.page}. ${resolution.candidates.length?"Possible catalog codes: "+resolution.candidates.join(", ")+". ":""}This row did not supply course metadata; check its code.`);
+        continue;
+      }
       const course=out.courses.find(c=>c.code.value===code);if(!course) continue;
+      matchedRows++;
+      const setName = (name: string, words: ExtractionWord[]) => {
+        if (!name || name.length > 200) return;
+        if (adapter.id==="ecu" && course.name.confidence.method==="catalog") {
+          const anomaly=recordECUNameEvidence(course,name,page,words);
+          if (anomaly && !out.warnings.includes(anomaly)) out.warnings.push(anomaly);
+          return;
+        }
+        const candidate = field(name, page, words);
+        // A later scan must not replace exact selectable text or a correction.
+        if (course.name.value && (course.name.confidence.method === "manual" || course.name.confidence.method === "pdf-text" && page.method === "ocr")) return;
+        course.name = candidate;
+      };
+      const protectedField=(f:ExtractedField<unknown>)=>adapter.id==="ecu" && (f.confidence.method==="catalog" || f.confidence.method==="manual" && f.confidence.level==="confirmed");
       const layout=adapter.materialPlanTable,table=page.table;
       if(layout && table?.columns.length===layout.columnCount+1 && centerX(word)>table.columns[0] && centerX(word)<table.columns[1]) {
         const row=table.rows.findIndex((y,i)=>i<table.rows.length-1&&centerY(word)>y&&centerY(word)<table.rows[i+1]);
         if(row>=0) {
           const cell=(column:number)=>page.words.filter(w=>centerX(w)>table.columns[column]&&centerX(w)<table.columns[column+1]&&centerY(w)>table.rows[row]&&centerY(w)<table.rows[row+1]).sort((a,b)=>a.y-b.y||a.x-b.x);
           const text=(column:number)=>linesFor({...page,words:cell(column)}).map(l=>l.text).join(" ").trim();
-          const name=text(layout.name);if(name) course.name=field(name,page,cell(layout.name));
+          const name=text(layout.name);setName(name,cell(layout.name));
           const numeric=(column:number)=>{const value=text(column);return /^(?:\d{1,2}(?:\.\d+)?)$/.test(value)?Number(value):null;};
-          const credit=numeric(layout.credits);if(credit!==null && credit<=30) course.credits=field(credit,page,cell(layout.credits),true);
+          const credit=numeric(layout.credits);if(credit!==null && credit<=30 && !protectedField(course.credits)) course.credits=field(credit,page,cell(layout.credits),true);
           const prerequisite=text(layout.prerequisite),codes=matchCourseCodes(adapter,prerequisite);
-          if(codes.length===1) course.prerequisite=field({code:codes[0],name:prerequisite.replace(new RegExp(codes[0],"i"),"").trim()},page,cell(layout.prerequisite),true);
-          else if(/^(?:N\/?A|none|[-–—])$/i.test(prerequisite)) course.prerequisite={value:null,confidence:field("None",page,cell(layout.prerequisite),true).confidence};
+          if(!protectedField(course.prerequisite)) {
+            if(codes.length===1) course.prerequisite=field({code:codes[0],name:prerequisite.replace(new RegExp(codes[0],"i"),"").trim()},page,cell(layout.prerequisite),true);
+            else if(/^(?:N\/?A|none|[-–—])$/i.test(prerequisite)) course.prerequisite={value:null,confidence:field("None",page,cell(layout.prerequisite),true).confidence};
+          }
           const hour=(column:number)=>/^[-–—]$/.test(text(column))?0:numeric(column);
           const lecture=hour(layout.lecture),lab=hour(layout.lab),tutorial=hour(layout.tutorial);
-          if(lecture!==null&&lab!==null&&tutorial!==null) course.hours=field({lecture,lab,tutorial},page,[...cell(layout.lecture),...cell(layout.lab),...cell(layout.tutorial)],true);
+          if(lecture!==null&&lab!==null&&tutorial!==null && !protectedField(course.hours)) course.hours=field({lecture,lab,tutorial},page,[...cell(layout.lecture),...cell(layout.lab),...cell(layout.tutorial)],true);
           continue;
         }
       }
       const next=courseAnchors.filter(a=>a.word.y>word.y+word.height*.6).sort((a,b)=>a.word.y-b.word.y)[0];
       const local=page.words.filter(w=>w.y>=word.y-word.height*.5&&w.y<(next?.word.y??word.y+word.height*3));
-      const numericHeaders=[lectureHeader,labHeader,tutorialHeader,creditsHeader,prerequisiteHeader].filter((w):w is ExtractionWord=>!!w).map(w=>w.x);
-      const endName=numericHeaders.length?Math.min(...numericHeaders.filter(x=>x>word.x+word.width)):page.width*.65;
+      // Footer prose ("Lab", "Lecture", etc.) below this course is not a
+      // column header and must not truncate its name or supply numeric fields.
+      const numericHeaders=[lectureHeader,labHeader,tutorialHeader,creditsHeader,prerequisiteHeader].filter((w):w is ExtractionWord=>!!w && w.y<word.y && w.x>word.x+word.width).map(w=>w.x);
+      const endName=numericHeaders.length?Math.min(...numericHeaders):page.width*.65;
       const nameWords=local.filter(w=>w.x>word.x+word.width*.8&&w.x<endName-2&&!matchCourseCodes(adapter,w.text).length&&!/^\d+$/.test(w.text));
-      const name=nameWords.sort((a,b)=>a.y-b.y||a.x-b.x).map(w=>w.text).join(" ").replace(/\s+/g," ").trim();
-      if(name) course.name=field(name,page,nameWords);
+      const name=linesFor({...page,words:nameWords}).map(l=>l.text).join(" ").trim();
+      setName(name,nameWords);
       const numeric=(header:ExtractionWord|undefined):ExtractedField<number>=>{
-        if(!header) return field<number>(null,page);
+        if(!header || header.y>=word.y) return field<number>(null,page);
         const matches=local.filter(w=>/^\d+(?:\.\d+)?$/.test(w.text)&&Math.abs(centerX(w)-centerX(header))<page.width*.035);
         return matches.length===1?field(Number(matches[0].text),page,matches):field<number>(null,page);
       };
-      const credit=numeric(creditsHeader);if(credit.value!==null&&credit.value<=30) course.credits=credit;
+      const credit=numeric(creditsHeader);if(credit.value!==null&&credit.value<=30 && !protectedField(course.credits)) course.credits=credit;
       const lecture=numeric(lectureHeader),lab=numeric(labHeader),tutorial=numeric(tutorialHeader);
-      if(lecture.value!==null&&lab.value!==null&&tutorial.value!==null) course.hours=field({lecture:lecture.value,lab:lab.value,tutorial:tutorial.value},page,local);
-      if(prerequisiteHeader) {
+      if(lecture.value!==null&&lab.value!==null&&tutorial.value!==null && !protectedField(course.hours)) course.hours=field({lecture:lecture.value,lab:lab.value,tutorial:tutorial.value},page,local);
+      if(prerequisiteHeader && prerequisiteHeader.y<word.y && !protectedField(course.prerequisite)) {
         const entries=local.filter(w=>w.x>=prerequisiteHeader.x-page.width*.025);
         const text=entries.map(w=>w.text).join(" ");
         const codes=matchCourseCodes(adapter,text);
@@ -186,6 +230,8 @@ export function enrichMaterialPlan(result:ImporterResult,pages:ExtractionPage[],
     if(!lines.length) out.warnings.push(`No text found on material-plan page ${page.page}.`);
     out.sources.push({name:page.source,pages:page.page,method:page.method});
   }
+  if (pages.length && !matchedRows) out.warnings.push("No material-plan rows matched your timetable course codes. Choose the pages for your level and semester, check the codes against the source, or enter course names manually.");
+  if (out.courses.every(c=>c.name.value)) out.warnings=out.warnings.filter(w=>!w.startsWith("Course names were not supplied in the timetable."));
   return out;
 }
 export function manualCourse(code:string):CandidateCourse {return emptyCourse(code.trim().toUpperCase());}

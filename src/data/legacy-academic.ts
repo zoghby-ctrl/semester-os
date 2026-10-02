@@ -1,3 +1,5 @@
+import { ecuCurriculumCourses } from "./ecu-catalog";
+import { courseColors } from "../lib/domain";
 export interface Course {
   id: string;
   name: string;
@@ -17,62 +19,11 @@ export interface Session {
   end: string;
   timeConfirmed: boolean;
 }
-export const courses: Course[] = [
-  {
-    id: "INF2101",
-    name: "System Analysis and Design",
-    shortName: "System Analysis",
-    credits: 3,
-    prerequisite: null,
-    color: "#94b5ff",
-    hours: { lecture: 2, lab: 2, tutorial: 0 },
-  },
-  {
-    id: "CSC2100",
-    name: "Data Structures",
-    shortName: "Data Structures",
-    credits: 3,
-    prerequisite: { code: "CSC1100", name: "Computer Programming I" },
-    color: "#c1a2f8",
-    hours: { lecture: 2, lab: 2, tutorial: 0 },
-  },
-  {
-    id: "CSC2104",
-    name: "Computer Architecture",
-    shortName: "Computer Architecture",
-    credits: 3,
-    prerequisite: { code: "BSC1205", name: "Digital Logic Design" },
-    color: "#e9b480",
-    hours: { lecture: 2, lab: 1, tutorial: 1 },
-  },
-  {
-    id: "CSC2105",
-    name: "Artificial Intelligence",
-    shortName: "Artificial Intelligence",
-    credits: 3,
-    prerequisite: { code: "BSC1103", name: "Discrete Mathematics" },
-    color: "#89d7c4",
-    hours: { lecture: 2, lab: 2, tutorial: 0 },
-  },
-  {
-    id: "HU2100",
-    name: "Ethical and Professional Issues in Computing",
-    shortName: "Ethics & Computing",
-    credits: 2,
-    prerequisite: null,
-    color: "#eaa4b7",
-    hours: { lecture: 2, lab: 0, tutorial: 0 },
-  },
-  {
-    id: "BSC1301",
-    name: "Mathematics III",
-    shortName: "Mathematics III",
-    credits: 3,
-    prerequisite: { code: "BSC1201", name: "Mathematics II" },
-    color: "#a7c9ec",
-    hours: { lecture: 2, lab: 0, tutorial: 2 },
-  },
-];
+export const courses: Course[] = ecuCurriculumCourses.map((c, i) => ({
+  id:c.code,name:c.name,shortName:c.shortName,credits:c.credits!,
+  prerequisite:c.prerequisite ? {...c.prerequisite} : null,
+  hours:{...c.hours!},color:courseColors[i],
+}));
 const session = (
   id: string,
   courseId: string,

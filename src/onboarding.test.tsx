@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { Provider, setupNavigationHint } from "./lib/context";
-import { activateSemester, db, initialize } from "./lib/db";
+import { activateSemester, db, initialize, updateSettings } from "./lib/db";
 import { legacySemester } from "./lib/legacy";
 
 // The real App, Provider, setup UI, parsing, normalization and persistence run.
@@ -97,6 +97,62 @@ async function expectNoHashChange(action: () => Promise<void>) {
 }
 
 describe("First-run navigation with real setup and IndexedDB", () => {
+  it("makes workflow help accessible before setup without unlocking navigation", async () => {
+    await mount(); await click("Help & getting started");
+    const dialog=document.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain("Record or correct attendance");
+    expect(dialog.textContent).toContain("Automatic missed classification is off");
+    expect(dialog.textContent).toContain("Data & backup");
+    expect(location.hash).toBe("#setup");
+    expect(button("Today").getAttribute("aria-disabled")).toBe("true");
+    await click("Close dialog",dialog);
+  });
+  it("keeps the guide available for empty/demo workspaces and reflects actual attendance preferences", async () => {
+    await mount(); await openEmpty();
+    expect(document.querySelector(".workflow-guide.panel")?.textContent).toContain("How to use Semester OS");
+    await act(async()=>{await updateSettings({graceMinutes:10,autoMissed:true,trackingSince:"2026-10-01"});});
+    await until(()=>!!document.querySelector(".workflow-guide.panel")?.textContent?.includes("10-minute grace period"));
+    expect(document.querySelector(".workflow-guide.panel")?.textContent).toContain("Automatic missed classification is on");
+  });
+  it("forwards chosen plan pages and timetable codes to the local extractor", async () => {
+    const {browserExtractor}=await import("./importer/extract");
+    const spy=vi.spyOn(browserExtractor,"extract");
+    try {
+      await mount();await click("Upload your timetable");
+      for (const [i,name] of ["synthetic-timetable.pdf","synthetic-plan.pdf"].entries()) {
+        const input=document.querySelectorAll<HTMLInputElement>('input[type="file"]')[i];
+        Object.defineProperty(input,"files",{value:[new File(["%PDF-1.4 test"],name,{type:"application/pdf"})]});
+        await act(async()=>input.dispatchEvent(new Event("change",{bubbles:true})));
+      }
+      await until(()=>!![...document.querySelectorAll("label")].find(l=>l.textContent?.startsWith("Material plan PDF pages")));
+      const range=[...document.querySelectorAll("label")].find(l=>l.textContent?.startsWith("Material plan PDF pages"))!.querySelector("input")!;
+      await act(async()=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value")!.set!.call(range,"4-5");range.dispatchEvent(new Event("input",{bubbles:true}));});
+      await click("Read my timetable");await until(()=>!!document.querySelector(".review-content"));
+      expect(spy.mock.calls[1][1]).toMatchObject({pages:[4,5],materialPlan:{adapterId:"ecu",courseCodes:["QA1001"]}});
+    } finally {spy.mockRestore();}
+  });
+  it("explains check-ins while preserving save, correction, and clear actions", async () => {
+    await mount();await openDemo();await click("Schedule");
+    await until(()=>!!document.querySelector(".schedule-block"));
+    await click("Previous week");
+    const openFirst=async()=>{await act(async()=>document.querySelector<HTMLButtonElement>(".schedule-block")!.click());await until(()=>!!document.querySelector('[role="dialog"]'));};
+    await openFirst();
+    let dialog=document.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain("suggested time is the scheduled start");
+    expect(dialog.textContent).toContain("excused is excluded");
+    await click("Save attendance",dialog);
+    await until(()=>!document.querySelector('[role="dialog"]'));
+    expect(await db.attendance.count()).toBe(1);
+    await openFirst();dialog=document.querySelector('[role="dialog"]')!;
+    const select=dialog.querySelector("select")!;
+    await act(async()=>{select.value="excused";select.dispatchEvent(new Event("change",{bubbles:true}));});
+    await click("Save attendance",dialog);await until(()=>!document.querySelector('[role="dialog"]'));
+    expect((await db.attendance.toArray())[0].status).toBe("excused");
+    expect(await db.attendance.count()).toBe(1);
+    await openFirst();await click("Clear record",document.querySelector('[role="dialog"]')!);
+    await until(()=>!document.querySelector('[role="dialog"]'));
+    expect(await db.attendance.count()).toBe(0);
+  });
   it("starts a fresh user on Setup with workspace navigation explicitly unavailable", async () => {
     await mount();
     await until(() => location.hash === "#setup");

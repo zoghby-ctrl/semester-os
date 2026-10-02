@@ -2,6 +2,16 @@ import type { DocumentExtractor, ExtractionPage, ExtractionWord } from "./types"
 import { prepareOcrImage } from "./ocr-image";
 import { MAX_DOCUMENT_BYTES, sniffFormat, validateImageHeader } from "../lib/security";
 import { validateExtractionPages } from "./validation";
+import { selectedPdfPages } from "./page-selection";
+import { resolveECUCode } from "../universities/ecu-codes";
+import { getUniversityAdapter, matchCourseCodes } from "../universities";
+
+function ocrWords(data: import("tesseract.js").Page, offsetX = 0, offsetY = 0): ExtractionWord[] {
+  return (data.blocks ?? []).flatMap(b => b.paragraphs.flatMap(p => p.lines.flatMap(l => l.words.map(w => ({
+    text: w.text, x: w.bbox.x0 + offsetX, y: w.bbox.y0 + offsetY,
+    width: w.bbox.x1 - w.bbox.x0, height: w.bbox.y1 - w.bbox.y0, score: w.confidence,
+  })))));
+}
 
 const maxBytes = MAX_DOCUMENT_BYTES;
 export function validateDocument(file: Pick<File, "name" | "type" | "size">) {
@@ -65,27 +75,32 @@ export function coloredBlocks(canvas: HTMLCanvasElement) {
 }
 
 export const browserExtractor: DocumentExtractor = {
-  async extract(file, {signal,progress}) {
+  async extract(file, {signal,progress,pages:selection,materialPlan}) {
     validateDocument(file);check(signal);
+    const adapter = materialPlan ? getUniversityAdapter(materialPlan.adapterId) : undefined;
     const internal = new AbortController();
     const abort=()=>internal.abort(); signal.addEventListener("abort",abort,{once:true});
     const timeout=setTimeout(abort,180000);
     let worker: import("tesseract.js").Worker | undefined;
+    let workerStopped: Promise<unknown> | undefined;
     let loading: import("pdfjs-dist").PDFDocumentLoadingTask | undefined;
-    const stop=()=>{ if(worker) void worker.terminate().catch(()=>{}); if(loading) void loading.destroy().catch(()=>{}); };
+    let ocrMessage = "Reading with local OCR";
+    const terminateWorker=()=>workerStopped ??= worker?.terminate().catch(()=>{});
+    const stop=()=>{ void terminateWorker(); if(loading) void loading.destroy().catch(()=>{}); };
     internal.signal.addEventListener("abort",stop,{once:true});
     const recognize = async (canvas:HTMLCanvasElement,page:number):Promise<ExtractionPage> => {
       check(internal.signal);
+      ocrMessage = `Reading page ${page} with local OCR`;
       progress(`Reading page ${page} with local OCR…`);
       if(!worker) {
         const {createWorker,OEM}=await import("tesseract.js");
         const base=new URL("vendor/ocr/",document.baseURI).href;
         const pending=createWorker("eng",OEM.LSTM_ONLY,{workerPath:base+"worker.min.js",corePath:base,langPath:base.replace(/\/$/,""),workerBlobURL:false,legacyCore:false,legacyLang:false,logger:m=>{
-          if(!internal.signal.aborted && m.status === "recognizing text") progress(`Reading page ${page} · ${Math.round(m.progress*100)}%`);
+          if(!internal.signal.aborted && m.status === "recognizing text") progress(`${ocrMessage} · ${Math.round(m.progress*100)}%`);
         }});
         pending.then(w=>{if(internal.signal.aborted) void w.terminate().catch(()=>{});}).catch(()=>{});
         worker=await bounded(pending,internal.signal);
-        await worker.setParameters({tessedit_pageseg_mode:"11" as import("tesseract.js").PSM,preserve_interword_spaces:"1"});
+        await bounded(worker.setParameters({tessedit_pageseg_mode:"11" as import("tesseract.js").PSM,preserve_interword_spaces:"1"}), internal.signal);
       }
       const prepared=prepareOcrImage(canvas);
       let input=prepared.canvas,offsetX=0,offsetY=0;
@@ -94,10 +109,36 @@ export const browserExtractor: DocumentExtractor = {
         input=document.createElement("canvas");input.width=Math.ceil(prepared.table.columns.at(-1)!-offsetX);input.height=Math.ceil(prepared.table.rows.at(-1)!-offsetY);
         input.getContext("2d")!.drawImage(prepared.canvas,offsetX,offsetY,input.width,input.height,0,0,input.width,input.height);
       }
-      await worker.setParameters({tessedit_pageseg_mode:(prepared.table?"6":"11") as import("tesseract.js").PSM});
+      await bounded(worker.setParameters({tessedit_pageseg_mode:(prepared.table?"6":"11") as import("tesseract.js").PSM}), internal.signal);
       const {data}=await bounded(worker.recognize(input,{}, {text:true,blocks:true}),internal.signal);
-      const words:ExtractionWord[]=(data.blocks ?? []).flatMap(b=>b.paragraphs.flatMap(p=>p.lines.flatMap(l=>l.words.map(w=>({text:w.text,x:w.bbox.x0+offsetX,y:w.bbox.y0+offsetY,width:w.bbox.x1-w.bbox.x0,height:w.bbox.y1-w.bbox.y0,score:w.confidence})))));
-      return {page,source:file.name,method:"ocr",width:canvas.width,height:canvas.height,text:data.text,words,table:prepared.table,blocks:coloredBlocks(canvas),preview:await blobFromCanvas(canvas)};
+      let words = ocrWords(data, offsetX, offsetY);
+      const layout = adapter?.materialPlanTable, table = prepared.table;
+      // A wide multilingual table is a poor single text block. Recognize the
+      // English name column separately, keeping its source coordinates/scores.
+      // Only use adapter geometry when the actual ruled column count matches.
+      if (layout && table?.columns.length === layout.columnCount + 1 && (!materialPlan?.courseCodes.length || materialPlan.courseCodes.some(code=>!resolveECUCode(code).entry))) {
+        check(internal.signal);
+        ocrMessage = `Reading course names on page ${page}`;
+        progress(ocrMessage + "…");
+        const left = Math.ceil(table.columns[layout.name] + 3), right = Math.floor(table.columns[layout.name + 1] - 3);
+        const top = Math.ceil(table.rows[0] + 3), bottom = Math.floor(table.rows.at(-1)! - 3);
+        if (right > left && bottom > top) {
+          const names = document.createElement("canvas"); names.width = right - left; names.height = bottom - top;
+          try {
+            names.getContext("2d")!.drawImage(prepared.canvas, left, top, names.width, names.height, 0, 0, names.width, names.height);
+            await bounded(worker.setParameters({tessedit_pageseg_mode:"6" as import("tesseract.js").PSM}), internal.signal);
+            const refined = ocrWords((await bounded(worker.recognize(names, {}, {text:true,blocks:true}), internal.signal)).data, left, top);
+            for (let row = 0; row < table.rows.length - 1; row++) {
+              const inCell = (w: ExtractionWord) => w.x + w.width / 2 > left && w.x + w.width / 2 < right && w.y + w.height / 2 > table.rows[row] && w.y + w.height / 2 < table.rows[row + 1];
+              const cellWords = refined.filter(inCell);
+              if (cellWords.length) words = [...words.filter(w => !inCell(w)), ...cellWords];
+            }
+          } finally { names.width = names.height = 1; }
+        }
+      }
+      if (input !== prepared.canvas) input.width = input.height = 1;
+      if (prepared.canvas !== canvas) prepared.canvas.width = prepared.canvas.height = 1;
+      return {page,source:file.name,method:"ocr",width:canvas.width,height:canvas.height,text:words.map(w=>w.text).join(" "),words,table:prepared.table,blocks:materialPlan?[]:coloredBlocks(canvas),preview:await blobFromCanvas(canvas)};
     };
     try {
       const format = await bounded(inspectDocument(file), internal.signal);
@@ -107,11 +148,13 @@ export const browserExtractor: DocumentExtractor = {
         pdfjs.GlobalWorkerOptions.workerSrc=new URL("vendor/pdf/pdf.worker.min.mjs",document.baseURI).href;
         loading=pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer()),useSystemFonts:true,enableXfa:false,maxImageSize:40000000});
         const pdf=await bounded(loading.promise,internal.signal);
-        if(pdf.numPages>20) throw new Error("This PDF has more than 20 pages. Upload only the relevant timetable or plan pages.");
+        const selected = selectedPdfPages(pdf.numPages, selection);
         const pages:ExtractionPage[]=[];
-        for(let pageNo=1;pageNo<=pdf.numPages;pageNo++) {
+        for(const pageNo of selected) {
           check(internal.signal);progress(`Reading PDF page ${pageNo} of ${pdf.numPages}…`);
           const page=await bounded(pdf.getPage(pageNo),internal.signal);
+          let canvas: HTMLCanvasElement | undefined;
+          try {
           const viewport=page.getViewport({scale:1});
           const content=await bounded(page.getTextContent(),internal.signal);
           if (content.items.length > 20000) throw new Error("This PDF page contains too much text. Upload only the relevant pages.");
@@ -119,15 +162,26 @@ export const browserExtractor: DocumentExtractor = {
             const transform=pdfjs.Util.transform(viewport.transform,item.transform);
             return {text:item.str,x:transform[4],y:transform[5]-Math.abs(transform[3]),width:item.width,height:Math.abs(transform[3]) || item.height,score:null};
           });
-          const scale=Math.min(2,2400/Math.max(viewport.width,viewport.height));
+          const text=words.map(w=>w.text).join(" ");
+          const detectedCodes = adapter ? matchCourseCodes(adapter, text) : [];
+          const selectable = text.replace(/\s/g,"").length >= 30 && (words.length >= 12 || !!materialPlan && words.length >= 3 && detectedCodes.length > 0);
+          // Skip only positively identified other-course text pages. Pages with
+          // no codes still need the normal extraction path.
+          if (selectable && materialPlan?.courseCodes.length && detectedCodes.length && !detectedCodes.some(code => materialPlan.courseCodes.includes(code))) {
+            progress(`Skipping material-plan page ${pageNo}: no matching timetable codes.`);
+            continue;
+          }
+          // Text plans need a readable preview, not an OCR-size raster or color
+          // flood-fill. Timetable geometry and scanned-page resolution stay separate.
+          const limit = selectable && materialPlan ? 1200 : materialPlan ? 3600 : 2400;
+          const scale=Math.min(materialPlan && !selectable ? 3 : 2,limit/Math.max(viewport.width,viewport.height));
           const rendered=page.getViewport({scale});
-          const canvas=document.createElement("canvas"); canvas.width=Math.ceil(rendered.width);canvas.height=Math.ceil(rendered.height);
+          canvas=document.createElement("canvas"); canvas.width=Math.ceil(rendered.width);canvas.height=Math.ceil(rendered.height);
           const canvasContext=canvas.getContext("2d");if(!canvasContext) throw new Error("Image rendering is unavailable in this browser. Try another browser or enter sessions manually.");
           await bounded(page.render({canvas,canvasContext,viewport:rendered}).promise,internal.signal);
-          const text=words.map(w=>w.text).join(" ");
-          if(text.replace(/\s/g,"").length>=30 && words.length>=12) pages.push({page:pageNo,source:file.name,method:"pdf-text",width:viewport.width,height:viewport.height,text,words,blocks:coloredBlocks(canvas).map(b=>({x:b.x/scale,y:b.y/scale,width:b.width/scale,height:b.height/scale})),preview:await blobFromCanvas(canvas)});
+          if(selectable) pages.push({page:pageNo,source:file.name,method:"pdf-text",width:viewport.width,height:viewport.height,text,words,blocks:materialPlan?[]:coloredBlocks(canvas).map(b=>({x:b.x/scale,y:b.y/scale,width:b.width/scale,height:b.height/scale})),preview:await blobFromCanvas(canvas)});
           else pages.push(await recognize(canvas,pageNo));
-          page.cleanup();canvas.width=canvas.height=1;
+          } finally { page.cleanup(); if(canvas) canvas.width=canvas.height=1; }
         }
         return validateExtractionPages(pages);
       }
@@ -135,22 +189,23 @@ export const browserExtractor: DocumentExtractor = {
       pendingBitmap.then(image => { if (internal.signal.aborted) image.close(); }).catch(() => {});
       const bitmap=await bounded(pendingBitmap,internal.signal);
       if(bitmap.width*bitmap.height>40000000 || bitmap.width<50 || bitmap.height<50) {bitmap.close();throw new Error("Choose a readable image under 40 megapixels. A PDF or cropped screenshot usually works well.");}
-      const scale=Math.min(2,2600/Math.max(bitmap.width,bitmap.height));
+      const scale=Math.min(materialPlan ? 3 : 2,(materialPlan ? 3600 : 2600)/Math.max(bitmap.width,bitmap.height));
       const canvas=document.createElement("canvas");canvas.width=Math.ceil(bitmap.width*scale);canvas.height=Math.ceil(bitmap.height*scale);
       const ctx=canvas.getContext("2d");if(!ctx) {bitmap.close();throw new Error("Image reading is unavailable. Try a PDF or enter sessions manually.");}
       ctx.fillStyle="#fff";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);bitmap.close();
-      const result=await recognize(canvas,1);canvas.width=canvas.height=1;return validateExtractionPages([result]);
+      try { return validateExtractionPages([await recognize(canvas,1)]); }
+      finally { canvas.width=canvas.height=1; }
     } catch(error) {
       if(internal.signal.aborted) {
         if(signal.aborted) throw cancelled();
         throw new Error("Reading took too long. Try a cropped image, fewer PDF pages, or enter the uncertain sessions manually.", {cause:error});
       }
       if(error instanceof Error && /password/i.test(error.message)) throw new Error("This PDF needs a password. Upload an unlocked copy or a screenshot.", {cause:error});
-      if(error instanceof Error && /pdf|image|decode|invalid|load/i.test(error.message)) throw new Error("We couldn't read this document. Try a clearer image or the original PDF. You can also enter sessions manually.", {cause:error});
+      if(error instanceof Error && /passwordexception|invalidpdfexception|decode|invalid image|loading failed/i.test(error.name + " " + error.message)) throw new Error("We couldn't read this document. Try a clearer image or the original PDF. You can also enter sessions manually.", {cause:error});
       throw error;
     } finally {
       clearTimeout(timeout); signal.removeEventListener("abort",abort); internal.signal.removeEventListener("abort",stop);
-      if(worker) await worker.terminate().catch(()=>{});
+      await terminateWorker();
       if(loading) await loading.destroy().catch(()=>{});
     }
   },

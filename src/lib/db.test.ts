@@ -1,9 +1,14 @@
 import { demoSettings } from "./legacy";
+import { enrichMaterialPlan, emptyImport, manualCourse, manualSession } from "../importer/parse";
+import { normalizeImport } from "../importer/normalize";
+import { confirmedField } from "../importer/confidence";
+import { ECUAdapter } from "../universities";
 const defaultSettings = demoSettings();
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   exportBackup,
+  activateSemester,
   importBackup,
   initialize,
   resetSemester,
@@ -41,6 +46,20 @@ afterEach(async () => {
   await database.delete();
 });
 describe("IndexedDB persistence and backup", () => {
+  it("round-trips editable ECU catalog defaults and their provenance in an existing v2 backup", async () => {
+    const draft=emptyImport("ecu");draft.courses=[manualCourse("CSC2105")];
+    const result=enrichMaterialPlan(draft,[],ECUAdapter);
+    result.courses[0].name=confirmedField("Updated official title");result.courses[0].reviewed=true;
+    const s=manualSession(result.courses[0].id);s.day=confirmedField(6);s.type=confirmedField("lecture");s.start=confirmedField("08:00");s.end=confirmedField("09:00");s.reviewed=true;result.sessions=[s];
+    const semester=normalizeImport(result,{name:"Student",adapterId:"ecu",program:"",level:"2",semesterName:"1",specialization:"",start:null,end:null});
+    await activateSemester(semester,defaultSettings.semester?.semester.id??null,database);
+    const backup=await exportBackup(database);expect(backup.version).toBe(2);
+    await resetSemester(database);await importBackup(JSON.parse(JSON.stringify(backup)),database);
+    const restored=(await database.settings.get("main"))?.semester?.courses[0];
+    expect(restored?.name).toBe("Updated official title");expect(restored?.credits).toBe(3);
+    expect(restored?.metadataProvenance?.name.method).toBe("manual");expect(restored?.metadataProvenance?.credits.method).toBe("catalog");
+    expect(restored?.metadataProvenance).toEqual(semester.courses[0].metadataProvenance);
+  });
   it("adds Star Drift to existing Prism settings without changing prior preferences", async () => {
     const { drift: _, ...prism } = defaultPrismSettings;
     await database.settings.put({

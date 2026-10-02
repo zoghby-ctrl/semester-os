@@ -8,7 +8,7 @@ export const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((s) => 
 export const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 export const confidenceSchema = z.object({
   level: z.enum(["high", "medium", "low", "unknown", "confirmed"]),
-  method: z.enum(["pdf-text", "ocr", "layout", "manual", "legacy", "demo"]),
+  method: z.enum(["pdf-text", "ocr", "layout", "manual", "legacy", "demo", "catalog"]),
   reason: z.string().max(500),
   // An OCR engine score is evidence about recognition, not a calibrated
   // probability that an academic field is correct.
@@ -37,6 +37,8 @@ export const courseSchema = z.object({
   prerequisiteKnown: z.boolean().default(false),
   color: z.string().regex(/^#[\da-f]{6}$/i),
   hours: z.object({ lecture: z.number().min(0).max(50), lab: z.number().min(0).max(50), tutorial: z.number().min(0).max(50) }).nullable(),
+  // Optional additive metadata: old semesters/backups remain valid.
+  metadataProvenance: z.object({code:confidenceSchema,name:confidenceSchema,credits:confidenceSchema,prerequisite:confidenceSchema,hours:confidenceSchema}).optional(),
 });
 export type Course = z.infer<typeof courseSchema>;
 export const courseOfferingSchema = z.object({ id: idSchema, courseId: idSchema, semesterId: idSchema, section: z.string().max(100).nullable() });

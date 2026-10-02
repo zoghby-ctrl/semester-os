@@ -66,7 +66,7 @@ After the reviewed local commit:
 
 ```sh
 git push origin main
-npx --yes wrangler@4.146.0 pages deploy dist --project-name=semester-os --branch=main
+npx --yes wrangler@4.146.0 pages deploy dist --project-name=semester-os --branch=semester-os-ecu
 npm run verify:hosted -- https://semester-os-4y6.pages.dev
 ```
 

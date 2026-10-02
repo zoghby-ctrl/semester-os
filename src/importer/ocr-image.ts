@@ -5,9 +5,19 @@ export function prepareOcrImage(source:HTMLCanvasElement) {
   const ctx=canvas.getContext("2d",{willReadFrequently:true})!;ctx.drawImage(source,0,0);
   const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
   const horizontal=new Uint32Array(canvas.height),vertical=new Uint32Array(canvas.width);
-  for(let y=0;y<canvas.height;y++) for(let x=0;x<canvas.width;x++) {
-    const i=(y*canvas.width+x)*4;
-    if(Math.max(data[i],data[i+1],data[i+2])<95) {horizontal[y]++;vertical[x]++;}
+  const verticalRuns=new Uint32Array(canvas.width);
+  for(let y=0;y<canvas.height;y++) {
+    let horizontalRun=0;
+    for(let x=0;x<canvas.width;x++) {
+      const i=(y*canvas.width+x)*4;
+      // Thin screenshot rules can be antialiased gray, not black. Require a
+      // continuous run so scattered letters cannot add up to a table rule.
+      if(Math.max(data[i],data[i+1],data[i+2])<180) {
+        horizontalRun++;verticalRuns[x]++;
+        horizontal[y]=Math.max(horizontal[y],horizontalRun);
+        vertical[x]=Math.max(vertical[x],verticalRuns[x]);
+      } else { horizontalRun=0;verticalRuns[x]=0; }
+    }
   }
   const bands=(counts:Uint32Array,threshold:number)=>{
     const out:{start:number;end:number;center:number}[]=[];
@@ -21,7 +31,9 @@ export function prepareOcrImage(source:HTMLCanvasElement) {
   // Solid timetable blocks are not ruled tables. Avoid erasing their fills.
   if(rows.length<4||columns.length<4||rows.some(b=>b.end-b.start>12)||columns.some(b=>b.end-b.start>12)) return {canvas:source,table:undefined};
   ctx.fillStyle="#fff";
-  for(const b of rows) ctx.fillRect(0,b.start-2,canvas.width,b.end-b.start+5);
-  for(const b of columns) ctx.fillRect(b.start-2,0,b.end-b.start+5,canvas.height);
+  // Erase only detected rule pixels. A fixed halo cut nearby letter strokes
+  // from tight screenshot cells and degraded course-name recognition.
+  for(const b of rows) ctx.fillRect(0,b.start,canvas.width,b.end-b.start+1);
+  for(const b of columns) ctx.fillRect(b.start,0,b.end-b.start+1,canvas.height);
   return {canvas,table:{rows:rows.map(b=>b.center),columns:columns.map(b=>b.center)}};
 }

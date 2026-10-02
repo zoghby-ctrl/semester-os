@@ -78,6 +78,7 @@ export function Schedule() {
           Edit times
         </button>
       </div>
+      <p className="fine-print">Select a class to record attendance. Use the week arrows for a past date, then reopen that class to correct its saved check-in.</p>
       <div className="schedule-toolbar">
         <div className="segmented" aria-label="Session filter">
           {[

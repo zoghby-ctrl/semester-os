@@ -1,4 +1,5 @@
 import type { UniversityAdapter } from "./types";
+import { ecuCodeTokens, resolveECUCode } from "./ecu-codes";
 
 const englishDays = [/^sun(?:day)?$/, /^mon(?:day)?$/, /^tue(?:sday)?$/, /^wed(?:nesday)?$/, /^thu(?:rsday)?$/, /^fri(?:day)?$/, /^sat(?:urday)?$/];
 const arabicDays = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -21,7 +22,7 @@ export const ECUAdapter: UniversityAdapter = {
   courseCodePattern: /\b[A-Z]{2,4}\s*\d{4}\b/gi,
   roomPattern: /\b[A-Z]\s*\d{3,4}\b/gi,
   materialPlanTable: {columnCount:12,name:1,credits:10,prerequisite:11,lecture:9,lab:7,tutorial:8},
-  importHelp: "Upload your ECU schedule. Review the detected courses, rooms, session types, and exact times. An optional material plan can add names, credits, and prerequisites.",
+  importHelp: "Upload your ECU schedule. Review the detected courses, rooms, session types, and exact times. Recognized codes use editable defaults from the local ECU catalog (Computer Science, Level 2 / Semester 1, plus named prerequisite references). Check your current official plan; an optional material plan supplies details for other codes.",
 };
 export const GenericAdapter: UniversityAdapter = {
   ...shared,
@@ -37,4 +38,6 @@ export function getUniversityAdapter(id: string) {
   if (!adapter) throw new Error("Choose a supported university or the generic schedule option.");
   return adapter;
 }
-export const matchCourseCodes = (adapter: UniversityAdapter, text: string) => [...text.matchAll(new RegExp(adapter.courseCodePattern.source, "gi"))].map(m => adapter.normalizeCourseCode(m[0]));
+export const matchCourseCodes = (adapter: UniversityAdapter, text: string) => adapter.id === "ecu"
+  ? ecuCodeTokens(text).flatMap(raw => {const match=resolveECUCode(raw);return match.code && match.status!=="ambiguous" ? [match.code] : [];})
+  : [...text.matchAll(new RegExp(adapter.courseCodePattern.source, "gi"))].map(m => adapter.normalizeCourseCode(m[0]));

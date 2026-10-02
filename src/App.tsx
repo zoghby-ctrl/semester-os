@@ -8,7 +8,6 @@ import {
   BookOpen,
   CalendarDays,
   ChevronRight,
-  Command as CommandIcon,
   Download,
   HelpCircle,
   LayoutDashboard,
@@ -37,6 +36,7 @@ import {
 import { Background } from "./components/Background";
 import { Modal } from "./components/ui";
 import { AttendanceDialog } from "./components/AttendanceDialog";
+import { WorkflowGuide } from "./components/WorkflowGuide";
 import { Today } from "./pages/Today";
 import { Schedule } from "./pages/Schedule";
 import { Courses, CourseDetail } from "./pages/Courses";
@@ -364,8 +364,8 @@ export default function App() {
                 </small>
               </span>
               <button
-                className="icon-button"
-                aria-label="Keyboard shortcuts"
+                className="icon-button help-trigger"
+                aria-label="Help & getting started"
                 onClick={() => setHelp(true)}
               >
                 <HelpCircle size={18} />
@@ -427,7 +427,7 @@ export default function App() {
                 SEMESTER OS <i /> {academicLabel(settings).toUpperCase()}
               </span>
               <button onClick={() => setHelp(true)}>
-                YOUR SPACE. YOUR PACE. <CommandIcon size={12} />
+                Help & getting started <HelpCircle size={12} />
               </button>
             </footer>
           </main>
@@ -597,10 +597,12 @@ export default function App() {
       <Modal
         open={help}
         onClose={() => setHelp(false)}
-        title="A few useful shortcuts"
-        description="Move around your semester without leaving the keyboard."
+        title="Help & getting started"
+        description="Your timetable, check-ins, course work, and backups."
       >
         {workspaceLocked && <p className="command-setup-note"><LockKeyhole size={13} aria-hidden="true" />Workspace shortcuts unlock after setup. Search and help remain available.</p>}
+        <WorkflowGuide />
+        <h3>Keyboard shortcuts</h3>
         <div className="shortcut-list">
           <div>
             <span>Search & quick actions</span>
